@@ -1,0 +1,443 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DeviceType {
+  phone
+  watch
+}
+
+enum DeviceGrade {
+  new
+  refurbished
+}
+
+enum CirculationState {
+  in_stock
+  deployed
+  in_repair
+  retired
+}
+
+enum ReplacementFlow {
+  advance
+  regular
+}
+
+enum ApprovalState {
+  auto_approved
+  pending_review
+  approved
+  rejected
+}
+
+enum ReviewState {
+  unreviewed
+  reviewed
+  needs_clarification
+}
+
+enum ReplacementResolution {
+  free_refurb
+  paid_refurb
+  upgrade
+  no_replacement
+  exception
+}
+
+enum ReplacementOrderStatus {
+  submitted
+  paid
+  awaiting_verification
+  refurb_dispatched
+  refurb_delivered
+  return_in_transit
+  return_received
+  closed
+  unidentified
+  return_discrepancy
+  fulfillment_blocked
+}
+
+enum ShipmentType {
+  inbound
+  outbound
+  internal_transfer
+}
+
+enum ShipmentStatus {
+  created
+  label_ready
+  in_transit
+  delivered
+  received
+  exception
+}
+
+enum FulfillmentType {
+  shopify_auto
+  manual
+}
+
+enum RepairStatus {
+  received
+  in_repair
+  qc_pass
+  back_to_stock
+  terminal_fail
+}
+
+enum TerminalDisposition {
+  scrap
+  parts_harvest
+  beyond_economic_repair
+}
+
+enum StaffTeam {
+  support
+  ops_lead
+  repair
+  logistics
+  admin
+}
+
+enum StaffAuthProvider {
+  google
+  email_otp
+}
+
+enum OtpPurpose {
+  staff_login
+  customer_email
+}
+
+enum FaultCategory {
+  screen
+  charging
+  camera
+  calls_cellular
+  battery
+  buttons
+  water_damage
+  other
+}
+
+model Customer {
+  id           String                @id @default(uuid()) @db.Uuid
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+  emails       CustomerEmail[]
+  devices      Device[]
+  orders       ReplacementOrder[]
+  accessTokens CustomerAccessToken[]
+
+  @@map("customers")
+}
+
+model CustomerEmail {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  email      String
+  normalized String
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at")
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, normalized])
+  @@index([normalized])
+  @@map("customer_emails")
+}
+
+model DeviceModel {
+  id              String             @id @default(uuid()) @db.Uuid
+  code            String             @unique @db.VarChar(3)
+  name            String
+  deviceType      DeviceType         @map("device_type")
+  serialPattern   String             @map("serial_pattern")
+  specifications  Json?
+  active          Boolean            @default(true)
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  devices         Device[]
+  processMappings ProcessTypeModel[]
+
+  @@map("device_models")
+}
+
+model Device {
+  serial              String             @id @db.VarChar(15)
+  modelId             String             @map("model_id") @db.Uuid
+  currentOwnerId      String?            @map("current_owner_id") @db.Uuid
+  iccid               String?
+  imei                String?
+  grade               DeviceGrade
+  circulationState    CirculationState   @map("circulation_state")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+  model               DeviceModel        @relation(fields: [modelId], references: [id])
+  currentOwner        Customer?          @relation(fields: [currentOwnerId], references: [id], onDelete: SetNull)
+  repairs             Repair[]
+  returnedForOrders   ReplacementOrder[] @relation("ReturnedDevice")
+  dispatchedForOrders ReplacementOrder[] @relation("OutboundDevice")
+  shipmentUnits       ShipmentUnit[]
+
+  @@index([modelId, circulationState])
+  @@index([currentOwnerId])
+  @@map("devices")
+}
+
+model ProcessType {
+  id                String             @id @default(uuid()) @db.Uuid
+  slug              String             @unique
+  name              String
+  flow              ReplacementFlow
+  feeInCents        Int                @map("fee_in_cents")
+  depositInCents    Int                @map("deposit_in_cents")
+  description       String
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  modelMappings     ProcessTypeModel[]
+  replacementOrders ReplacementOrder[]
+
+  @@map("process_types")
+}
+
+model ProcessTypeModel {
+  processTypeId String      @map("process_type_id") @db.Uuid
+  modelId       String      @map("model_id") @db.Uuid
+  processType   ProcessType @relation(fields: [processTypeId], references: [id], onDelete: Cascade)
+  model         DeviceModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@id([processTypeId, modelId])
+  @@map("process_type_models")
+}
+
+model ReplacementOrder {
+  id                       String                 @id @default(uuid()) @db.Uuid
+  orderNumber              Int                    @unique @default(autoincrement()) @map("order_number")
+  customerId               String                 @map("customer_id") @db.Uuid
+  processTypeId            String?                @map("process_type_id") @db.Uuid
+  returnedDeviceSerial     String?                @map("returned_device_serial") @db.VarChar(15)
+  outboundDeviceSerial     String?                @map("outbound_device_serial") @db.VarChar(15)
+  status                   ReplacementOrderStatus @default(submitted)
+  approvalState            ApprovalState          @default(auto_approved) @map("approval_state")
+  reviewState              ReviewState            @default(unreviewed) @map("review_state")
+  resolution               ReplacementResolution?
+  customerFaultCategory    FaultCategory?         @map("customer_fault_category")
+  customerFaultText        String?                @map("customer_fault_text")
+  csVerifiedFault          String?                @map("cs_verified_fault")
+  freeOutcomeReason        String?                @map("free_outcome_reason")
+  originationTicketId      String?                @map("origination_ticket_id")
+  communicationTicketId    String?                @map("communication_ticket_id")
+  paymentReference         String?                @map("payment_reference")
+  paymentLastFour          String?                @map("payment_last_four") @db.VarChar(4)
+  amountPaidInCents        Int                    @default(0) @map("amount_paid_in_cents")
+  depositRefundedInCents   Int                    @default(0) @map("deposit_refunded_in_cents")
+  encryptedShippingAddress String?                @map("encrypted_shipping_address")
+  submittedAt              DateTime?              @map("submitted_at")
+  createdAt                DateTime               @default(now()) @map("created_at")
+  updatedAt                DateTime               @updatedAt @map("updated_at")
+  customer                 Customer               @relation(fields: [customerId], references: [id])
+  processType              ProcessType?           @relation(fields: [processTypeId], references: [id])
+  returnedDevice           Device?                @relation("ReturnedDevice", fields: [returnedDeviceSerial], references: [serial], onDelete: SetNull)
+  outboundDevice           Device?                @relation("OutboundDevice", fields: [outboundDeviceSerial], references: [serial], onDelete: SetNull)
+  shipments                Shipment[]
+  accessTokens             CustomerAccessToken[]
+
+  @@index([customerId, createdAt])
+  @@index([status, reviewState])
+  @@index([returnedDeviceSerial])
+  @@index([outboundDeviceSerial])
+  @@map("replacement_orders")
+}
+
+model Repair {
+  id                   String               @id @default(uuid()) @db.Uuid
+  deviceSerial         String               @map("device_serial") @db.VarChar(15)
+  status               RepairStatus         @default(received)
+  resolutionCategory   FaultCategory?       @map("resolution_category")
+  repairTeamResolution String?              @map("repair_team_resolution")
+  detailedNotes        String?              @map("detailed_notes")
+  terminalDisposition  TerminalDisposition? @map("terminal_disposition")
+  terminalReason       String?              @map("terminal_reason")
+  receivedAt           DateTime             @default(now()) @map("received_at")
+  completedAt          DateTime?            @map("completed_at")
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+  device               Device               @relation(fields: [deviceSerial], references: [serial])
+  photos               RepairPhoto[]
+
+  @@index([deviceSerial, createdAt])
+  @@index([status])
+  @@map("repairs")
+}
+
+model RepairPhoto {
+  id        String   @id @default(uuid()) @db.Uuid
+  repairId  String   @map("repair_id") @db.Uuid
+  objectKey String   @map("object_key")
+  caption   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  repair    Repair   @relation(fields: [repairId], references: [id], onDelete: Cascade)
+
+  @@map("repair_photos")
+}
+
+model Shipment {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  replacementOrderId String?                 @map("replacement_order_id") @db.Uuid
+  type               ShipmentType
+  status             ShipmentStatus          @default(created)
+  fulfillmentType    FulfillmentType?        @map("fulfillment_type")
+  carrier            String?
+  trackingNumber     String?                 @map("tracking_number")
+  provider           String?
+  providerShipmentId String?                 @map("provider_shipment_id")
+  labelObjectKey     String?                 @map("label_object_key")
+  qrCodeObjectKey    String?                 @map("qr_code_object_key")
+  costInCents        Int?                    @map("cost_in_cents")
+  deliveredAt        DateTime?               @map("delivered_at")
+  receivedAt         DateTime?               @map("received_at")
+  contentsPresent    Boolean?                @map("contents_present")
+  contentsNotes      String?                 @map("contents_notes")
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @updatedAt @map("updated_at")
+  replacementOrder   ReplacementOrder?       @relation(fields: [replacementOrderId], references: [id])
+  units              ShipmentUnit[]
+  trackingEvents     ShipmentTrackingEvent[]
+
+  @@index([replacementOrderId, type])
+  @@index([trackingNumber])
+  @@index([status, deliveredAt])
+  @@map("shipments")
+}
+
+model ShipmentUnit {
+  shipmentId   String   @map("shipment_id") @db.Uuid
+  deviceSerial String   @map("device_serial") @db.VarChar(15)
+  observed     Boolean  @default(false)
+  shipment     Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  device       Device   @relation(fields: [deviceSerial], references: [serial])
+
+  @@id([shipmentId, deviceSerial])
+  @@map("shipment_units")
+}
+
+model ShipmentTrackingEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  shipmentId   String   @map("shipment_id") @db.Uuid
+  providerCode String?  @map("provider_code")
+  description  String
+  occurredAt   DateTime @map("occurred_at")
+  recordedAt   DateTime @default(now()) @map("recorded_at")
+  rawPayload   Json?    @map("raw_payload")
+  shipment     Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId, occurredAt])
+  @@map("shipment_tracking_events")
+}
+
+model StaffUser {
+  id          String           @id @default(uuid()) @db.Uuid
+  email       String           @unique
+  displayName String           @map("display_name")
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  identities  StaffIdentity[]
+  memberships TeamMembership[]
+  sessions    StaffSession[]
+  auditEvents AuditEvent[]
+
+  @@map("staff_users")
+}
+
+model StaffIdentity {
+  id              String            @id @default(uuid()) @db.Uuid
+  staffUserId     String            @map("staff_user_id") @db.Uuid
+  provider        StaffAuthProvider
+  providerSubject String            @map("provider_subject")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  staffUser       StaffUser         @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@map("staff_identities")
+}
+
+model TeamMembership {
+  staffUserId String    @map("staff_user_id") @db.Uuid
+  team        StaffTeam
+  createdAt   DateTime  @default(now()) @map("created_at")
+  staffUser   StaffUser @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+
+  @@id([staffUserId, team])
+  @@map("team_memberships")
+}
+
+model StaffSession {
+  id          String    @id @default(uuid()) @db.Uuid
+  staffUserId String    @map("staff_user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash") @db.Char(64)
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at")
+  staffUser   StaffUser @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+
+  @@index([staffUserId, expiresAt])
+  @@map("staff_sessions")
+}
+
+model OtpChallenge {
+  id              String     @id @default(uuid()) @db.Uuid
+  normalizedEmail String     @map("normalized_email")
+  purpose         OtpPurpose @default(staff_login)
+  codeHash        String     @map("code_hash") @db.Char(64)
+  expiresAt       DateTime   @map("expires_at")
+  consumedAt      DateTime?  @map("consumed_at")
+  failedAttempts  Int        @default(0) @map("failed_attempts")
+  createdAt       DateTime   @default(now()) @map("created_at")
+
+  @@index([normalizedEmail, purpose, expiresAt])
+  @@map("otp_challenges")
+}
+
+model CustomerAccessToken {
+  id                 String           @id @default(uuid()) @db.Uuid
+  customerId         String           @map("customer_id") @db.Uuid
+  replacementOrderId String           @map("replacement_order_id") @db.Uuid
+  tokenHash          String           @unique @map("token_hash") @db.Char(64)
+  parentAppIssued    Boolean          @default(false) @map("parent_app_issued")
+  expiresAt          DateTime         @map("expires_at")
+  revokedAt          DateTime?        @map("revoked_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  customer           Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  replacementOrder   ReplacementOrder @relation(fields: [replacementOrderId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, expiresAt])
+  @@index([replacementOrderId])
+  @@map("customer_access_tokens")
+}
+
+model AuditEvent {
+  id           String     @id @default(uuid()) @db.Uuid
+  actorStaffId String?    @map("actor_staff_id") @db.Uuid
+  actorKind    String     @map("actor_kind")
+  action       String
+  entityType   String     @map("entity_type")
+  entityId     String     @map("entity_id")
+  metadata     Json?
+  ipAddress    String?    @map("ip_address")
+  occurredAt   DateTime   @default(now()) @map("occurred_at")
+  actorStaff   StaffUser? @relation(fields: [actorStaffId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, occurredAt])
+  @@index([actorStaffId, occurredAt])
+  @@map("audit_events")
+}

@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Teracube Device Care
 
-## Getting Started
+A unit-centric replacement, repair, and refurbishment portal for Teracube.
 
-First, run the development server:
+The application serves parents, customer support, repair technicians, logistics, operations leads, and administrators from one Next.js application backed by PostgreSQL.
+
+## Local development
+
+Requirements: Node.js 20.19+ and npm.
 
 ```bash
+npm install
+npm run db:generate
+docker compose up -d postgres
+npm run db:deploy
+npm run db:seed
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Verification
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run db:verify
+npm run build
+```
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+See [`docs/architecture.md`](docs/architecture.md) for the domain model, workflow boundaries, route plan, integration contracts, and build phases.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+See [`docs/security.md`](docs/security.md) for authentication, authorization, PII, encryption, and audit guarantees.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+See [`docs/parent-journey.md`](docs/parent-journey.md) for the working customer flow, demo device records, and mock pricing.
 
-## Deploy on Vercel
+For local checkout testing, use the in-form mock email code and the “Use demo address” button. Real delivery and address-provider credentials are connected in the production integrations milestone.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The authoritative product specification is `../context/New Repair Workflow/PRD_V2.md`.
