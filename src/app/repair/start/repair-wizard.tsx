@@ -361,7 +361,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
               type="email"
               value={email}
               onChange={(event) => changeEmail(event.target.value)}
-              placeholder="Enter an inbox you can open"
+              placeholder="Enter email"
               className="mt-2 h-12 w-full rounded-xl border border-black/15 px-4 outline-none transition focus:border-[var(--green-strong)] focus:ring-3 focus:ring-[var(--mint)]/40"
             />
 
@@ -577,7 +577,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
                   aria-label="Parent email"
                   value={email}
                   onChange={(event) => changeEmail(event.target.value)}
-                  placeholder="Enter an inbox you can open"
+                  placeholder="Enter email"
                   className="mt-4 h-12 w-full rounded-xl border border-black/15 px-4 outline-none focus:border-[var(--green-strong)]"
                 />
                 {emailChallengeId ? (

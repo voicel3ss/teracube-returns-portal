@@ -92,6 +92,18 @@ async function main() {
     update: {},
     create: { staffUserId: admin.id, team: "admin" },
   });
+
+  const supportAgent = await prisma.staffUser.upsert({
+    where: { email: "support@myteracube.com" },
+    update: { active: true, displayName: "Demo Support Agent" },
+    create: { email: "support@myteracube.com", displayName: "Demo Support Agent" },
+  });
+
+  await prisma.teamMembership.upsert({
+    where: { staffUserId_team: { staffUserId: supportAgent.id, team: "support" } },
+    update: {},
+    create: { staffUserId: supportAgent.id, team: "support" },
+  });
 }
 
 main()

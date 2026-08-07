@@ -51,6 +51,13 @@ export async function POST(request: Request) {
         submittedAt: new Date(),
       },
     });
+    await transaction.workItem.create({
+      data: {
+        replacementOrderId: created.id,
+        team: "support",
+        kind: "unidentified_device",
+      },
+    });
     await transaction.auditEvent.create({
       data: {
         actorKind: "customer",

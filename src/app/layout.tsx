@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Teracube Device Care",
-  description: "Replacement, repair, and refurbishment operations for Teracube devices.",
+  description: "Start and track a Teracube device repair or replacement request.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

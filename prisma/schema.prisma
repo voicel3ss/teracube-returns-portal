@@ -127,15 +127,36 @@ enum FaultCategory {
   other
 }
 
-model Customer {
-  id           String                @id @default(uuid()) @db.Uuid
-  createdAt    DateTime              @default(now()) @map("created_at")
-  updatedAt    DateTime              @updatedAt @map("updated_at")
-  emails       CustomerEmail[]
-  devices      Device[]
-  orders       ReplacementOrder[]
-  accessTokens CustomerAccessToken[]
+enum WorkItemStatus {
+  open
+  claimed
+  snoozed
+  completed
+}
 
+enum WorkItemKind {
+  claim_verification
+  unidentified_device
+  return_discrepancy
+  fulfillment_blocked
+  deposit_refund
+  needs_clarification
+}
+
+model Customer {
+  id              String                @id @default(uuid()) @db.Uuid
+  mergedIntoId    String?               @map("merged_into_id") @db.Uuid
+  mergedAt        DateTime?             @map("merged_at")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+  emails          CustomerEmail[]
+  devices         Device[]
+  orders          ReplacementOrder[]
+  accessTokens    CustomerAccessToken[]
+  mergedInto      Customer?             @relation("CustomerMerges", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedCustomers Customer[]            @relation("CustomerMerges")
+
+  @@index([mergedIntoId])
   @@map("customers")
 }
 
@@ -148,7 +169,7 @@ model CustomerEmail {
   createdAt  DateTime @default(now()) @map("created_at")
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
-  @@unique([customerId, normalized])
+  @@index([customerId, normalized])
   @@index([normalized])
   @@map("customer_emails")
 }
@@ -249,6 +270,7 @@ model ReplacementOrder {
   outboundDevice           Device?                @relation("OutboundDevice", fields: [outboundDeviceSerial], references: [serial], onDelete: SetNull)
   shipments                Shipment[]
   accessTokens             CustomerAccessToken[]
+  workItems                WorkItem[]
 
   @@index([customerId, createdAt])
   @@index([status, reviewState])
@@ -344,18 +366,40 @@ model ShipmentTrackingEvent {
 }
 
 model StaffUser {
-  id          String           @id @default(uuid()) @db.Uuid
-  email       String           @unique
-  displayName String           @map("display_name")
-  active      Boolean          @default(true)
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  identities  StaffIdentity[]
-  memberships TeamMembership[]
-  sessions    StaffSession[]
-  auditEvents AuditEvent[]
+  id                String           @id @default(uuid()) @db.Uuid
+  email             String           @unique
+  displayName       String           @map("display_name")
+  active            Boolean          @default(true)
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  identities        StaffIdentity[]
+  memberships       TeamMembership[]
+  sessions          StaffSession[]
+  auditEvents       AuditEvent[]
+  assignedWorkItems WorkItem[]       @relation("AssignedWorkItems")
 
   @@map("staff_users")
+}
+
+model WorkItem {
+  id                 String           @id @default(uuid()) @db.Uuid
+  replacementOrderId String           @map("replacement_order_id") @db.Uuid
+  team               StaffTeam
+  kind               WorkItemKind
+  status             WorkItemStatus   @default(open)
+  assignedToStaffId  String?          @map("assigned_to_staff_id") @db.Uuid
+  snoozedUntil       DateTime?        @map("snoozed_until")
+  assignmentNote     String?          @map("assignment_note")
+  lastActivityAt     DateTime         @default(now()) @map("last_activity_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  replacementOrder   ReplacementOrder @relation(fields: [replacementOrderId], references: [id], onDelete: Cascade)
+  assignedToStaff    StaffUser?       @relation("AssignedWorkItems", fields: [assignedToStaffId], references: [id], onDelete: SetNull)
+
+  @@unique([replacementOrderId, kind])
+  @@index([team, status, snoozedUntil])
+  @@index([assignedToStaffId, status])
+  @@map("work_items")
 }
 
 model StaffIdentity {

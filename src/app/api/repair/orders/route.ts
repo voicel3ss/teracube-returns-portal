@@ -137,6 +137,14 @@ export async function POST(request: Request) {
       },
     });
 
+    await transaction.workItem.create({
+      data: {
+        replacementOrderId: created.id,
+        team: "support",
+        kind: "claim_verification",
+      },
+    });
+
     await transaction.auditEvent.create({
       data: {
         actorKind: "customer",

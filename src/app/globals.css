@@ -1,12 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --surface: #f6f7f3;
+  --surface: #ffffff;
   --ink: #090909;
-  --mint: #87f4ca;
+  --mint: #87f5cb;
   --purple: #d290fa;
-  --green: #8ec760;
-  --green-strong: #427b27;
+  --green: #87f5cb;
+  --green-soft: rgba(152, 163, 173, 0.15);
+  --green-strong: #246b55;
   --charcoal: #3d4246;
 }
 
@@ -26,4 +27,15 @@ body {
   background: var(--surface);
   color: var(--ink);
   font-family: "Poppins", Arial, sans-serif;
+}
+
+a[href],
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
 }

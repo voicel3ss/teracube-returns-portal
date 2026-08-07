@@ -75,7 +75,8 @@ export class MockCommerceProvider implements CommerceProvider {
     };
   }
 
-  async refund() {
+  async refund(_input: { paymentReference: string; amount: Money }) {
+    void _input;
     return { refundReference: `mock-refund-${crypto.randomUUID()}` };
   }
 
