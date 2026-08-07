@@ -91,8 +91,8 @@ export default function Home() {
               <Image
                 src="/brand/teracube-wordmark.png"
                 alt="Teracube"
-                width={176}
-                height={25}
+                width={2196}
+                height={478}
                 className="h-auto w-36 brightness-0 invert"
               />
               <p className="mt-5 max-w-sm text-sm leading-6 text-white/55">
