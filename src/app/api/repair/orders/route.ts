@@ -7,7 +7,7 @@ import { inferCoverage } from "@/domain/repair-intake";
 import { parseTeracubeSerial } from "@/domain/serial-number";
 import { mockCommerceProvider, mockHelpdeskProvider } from "@/integrations/mocks/device-care";
 import { PiiCipher } from "@/security/pii-cipher";
-import { findOrCreateCustomer } from "@/server/customers";
+import { consolidateCustomerForDevice } from "@/server/customers";
 import {
   canonicalAddress,
   normalizeEmail,
@@ -89,6 +89,39 @@ export async function POST(request: Request) {
   const encryptionKey = process.env.PII_ENCRYPTION_KEY;
   if (!encryptionKey) return Response.json({ error: "Shipping-address encryption is not configured." }, { status: 503 });
 
+  const customer = await prisma.$transaction((transaction) =>
+    consolidateCustomerForDevice(transaction, { email: normalizedEmail, serial: serialResult.value.serial }),
+  );
+  const activeOrder = await prisma.replacementOrder.findFirst({
+    where: { returnedDeviceSerial: serialResult.value.serial, status: { not: "closed" } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (activeOrder) {
+    const access = await new CustomerTokenService(new PrismaCustomerTokenRepository(prisma)).issue({
+      customerId: customer.id,
+      replacementOrderId: activeOrder.id,
+    });
+    const trackingUrl = `/repair/track?token=${encodeURIComponent(access.token)}`;
+    await prisma.auditEvent.create({
+      data: {
+        actorKind: "customer",
+        action: "replacement_order.duplicate_prevented",
+        entityType: "replacement_order",
+        entityId: activeOrder.id,
+        metadata: { serial: serialResult.value.serial, alternateEmailVerified: true },
+      },
+    });
+    return Response.json(
+      {
+        code: "ACTIVE_REQUEST_EXISTS",
+        error: `A replacement request is already in progress for this device (order #${String(activeOrder.orderNumber).padStart(4, "0")}).`,
+        orderNumber: activeOrder.orderNumber,
+        trackingUrl,
+      },
+      { status: 409 },
+    );
+  }
+
   const orderId = randomUUID();
   const checkout = await mockCommerceProvider.createCheckout({
     orderId,
@@ -105,7 +138,6 @@ export async function POST(request: Request) {
   const encryptedAddress = cipher.encrypt(JSON.stringify(parsed.data.shippingAddress));
 
   const order = await prisma.$transaction(async (transaction) => {
-    const customer = await findOrCreateCustomer(transaction, normalizedEmail);
     await transaction.device.upsert({
       where: { serial: serialResult.value.serial },
       update: { modelId: parsed.data.modelId, currentOwnerId: customer.id },

@@ -68,6 +68,9 @@ The application keeps external services behind provider interfaces. Local develo
 
 Firebase Authentication is optional, not required for the current parent flow. It is useful if parents later receive persistent accounts or passwordless magic-link login. It does not replace postal-address validation, Shopify, shipping, or helpdesk APIs, and Firebase's Trigger Email extension still requires an SMTP delivery service. The present account-free, six-digit-code flow is simpler with Postmark.
 
+### Events, automation, and operations
+
+| Status | Service / API | Responsibility | Production implementation |
 | --- | --- | --- | --- |
 | Required | Webhook ingress for Shopify, ShipSaving, Freshdesk, and storage/security events | Drive payment, fulfillment, shipment, and communication state changes | Give each provider its own route and signing secret. Verify signatures against the raw request body, reject stale/replayed events, persist provider event IDs, return quickly, and process events idempotently. Never expose a generic unsigned status-update endpoint. |
 | Required | Scheduled jobs / worker | Poll tracking when webhooks are unavailable; send day-4 reminders; raise day-6, unidentified, stale-claim, and stuck-unit alerts; backfill outbound serials | Run jobs outside request handlers using the chosen host's scheduler or a dedicated worker. Protect every job with a distributed lock and idempotency key. |

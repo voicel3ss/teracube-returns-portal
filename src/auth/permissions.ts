@@ -6,7 +6,6 @@ export const permissions = [
   "order:verify",
   "order:view_all",
   "order:refund",
-  "customer:merge",
   "repair:record",
   "repair:batch_ready",
   "shipment:receive",
@@ -19,13 +18,12 @@ export const permissions = [
 export type Permission = (typeof permissions)[number];
 
 const teamPermissions: Record<StaffTeam, readonly Permission[]> = {
-  support: ["order:create", "order:verify", "order:view_all", "order:refund", "customer:merge", "queue:claim"],
+  support: ["order:create", "order:verify", "order:view_all", "order:refund", "queue:claim"],
   ops_lead: [
     "order:create",
     "order:verify",
     "order:view_all",
     "order:refund",
-    "customer:merge",
     "queue:claim",
     "queue:assign",
   ],

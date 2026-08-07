@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { BrandHeader } from "@/components/brand-header";
 
 const steps = [
@@ -83,14 +84,45 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="border-t border-black/[0.06]">
-        <div className="mx-auto flex max-w-6xl justify-end px-6 py-5">
-          <Link
-            href="/staff/login"
-            className="rounded-lg px-3 py-2 text-xs font-medium text-black/35 transition hover:bg-black/[0.04] hover:text-black/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--green-strong)]"
-          >
-            Staff sign in
-          </Link>
+      <footer className="bg-[#0b0d0b] text-white">
+        <div className="mx-auto max-w-7xl px-6 py-12 sm:px-8 sm:py-14">
+          <div className="grid gap-10 md:grid-cols-2 md:items-end">
+            <div>
+              <Image
+                src="/brand/teracube-wordmark.png"
+                alt="Teracube"
+                width={176}
+                height={25}
+                className="h-auto w-36 brightness-0 invert"
+              />
+              <p className="mt-5 max-w-sm text-sm leading-6 text-white/55">
+                Straightforward repairs and replacements for Teracube families.
+              </p>
+            </div>
+            <div className="md:justify-self-end">
+              <p className="text-lg font-semibold">Need help with a device?</p>
+              <p className="mt-2 text-sm text-white/55">We’ll help you identify it and understand your options.</p>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link href="/repair/start" className="inline-flex h-11 items-center justify-center rounded-full bg-white px-6 text-sm font-semibold text-black transition hover:bg-[var(--green)]">
+                  Start a request
+                </Link>
+                <a href="https://myteracube.com/" target="_blank" rel="noreferrer" className="inline-flex h-11 items-center justify-center rounded-full border border-white/20 px-6 text-sm font-semibold text-white transition hover:border-white/45">
+                  Visit Teracube
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-10 border-t border-white/15 pt-6">
+            <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-7 gap-y-3 text-sm font-medium text-white/65">
+              <Link href="/repair/start" className="transition hover:text-white">Start a request</Link>
+              <Link href="/repair/start?entry=demo-parent-app" className="transition hover:text-white">Parent app entry</Link>
+              <a href="https://myteracube.com/pages/contact-us" target="_blank" rel="noreferrer" className="transition hover:text-white">Contact Teracube</a>
+              <a href="https://myteracube.com/pages/privacy-policy" target="_blank" rel="noreferrer" className="transition hover:text-white">Privacy</a>
+              <Link href="/staff/login" className="transition hover:text-white">Staff sign in</Link>
+            </nav>
+            <p className="mt-6 text-xs text-white/35">© 2026 Teracube. All rights reserved.</p>
+          </div>
         </div>
       </footer>
     </main>

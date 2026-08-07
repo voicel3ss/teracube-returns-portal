@@ -20,7 +20,7 @@ The review state is the shipping-label gate. Support records its verified fault 
 
 ## Customer records
 
-Customer merge is preview-then-confirm. Support chooses the surviving record and primary email. Emails, devices, replacement orders, and access tokens move to the survivor; the source record is retained as merged, not deleted. Serial conflicts are called out during preview and every merge is audited.
+Support can search customer records by email or device serial. Duplicate handling is automatic: after a customer verifies an alternate email for an existing device, the application consolidates the records, preserves every email, order, device, and access token, and records an audit event. Support has no manual merge control.
 
 ## Refunds and customer links
 

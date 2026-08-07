@@ -66,6 +66,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
   });
   const [addressValidationToken, setAddressValidationToken] = useState<string | null>(null);
   const [result, setResult] = useState<{ orderNumber: number; trackingUrl: string } | null>(null);
+  const [activeRequest, setActiveRequest] = useState<{ orderNumber: number; trackingUrl: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const appEntryLoaded = useRef(false);
@@ -125,6 +126,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
     }
     setBusy(true);
     setError(null);
+    setActiveRequest(null);
     try {
       const response = await fetch("/api/repair/options", {
         method: "POST",
@@ -281,6 +283,10 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
         }),
       });
       const body = await response.json();
+      if (response.status === 409 && body.code === "ACTIVE_REQUEST_EXISTS") {
+        setActiveRequest({ orderNumber: body.orderNumber, trackingUrl: body.trackingUrl });
+        return;
+      }
       if (!response.ok) throw new Error(body.error ?? "We couldn't complete the request.");
       setResult(body);
       setStep("done");
@@ -680,7 +686,17 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
           </div>
         ) : null}
 
-        {error ? (
+        {activeRequest ? (
+          <div role="status" className="mt-5 rounded-2xl border border-[var(--green-strong)]/25 bg-[var(--mint)]/25 p-5">
+            <h2 className="font-semibold">A request is already in progress for this device</h2>
+            <p className="mt-2 text-sm leading-6 text-black/60">
+              We connected your verified email to order #{String(activeRequest.orderNumber).padStart(4, "0")} instead of creating a duplicate request.
+            </p>
+            <Link href={activeRequest.trackingUrl} className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-black px-5 text-sm font-semibold text-white">
+              View existing request
+            </Link>
+          </div>
+        ) : error ? (
           <div role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {error}
           </div>
