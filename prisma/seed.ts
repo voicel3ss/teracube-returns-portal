@@ -31,7 +31,7 @@ async function main() {
     }),
   ]);
 
-  const demoProcessTypes = [
+  const processTypes = [
     {
       slug: "warranty-advance",
       name: "Warranty advance replacement",
@@ -66,7 +66,7 @@ async function main() {
     },
   ];
 
-  for (const input of demoProcessTypes) {
+  for (const input of processTypes) {
     const processType = await prisma.processType.upsert({
       where: { slug: input.slug },
       update: input,
@@ -95,8 +95,8 @@ async function main() {
 
   const supportAgent = await prisma.staffUser.upsert({
     where: { email: "support@myteracube.com" },
-    update: { active: true, displayName: "Demo Support Agent" },
-    create: { email: "support@myteracube.com", displayName: "Demo Support Agent" },
+    update: { active: true, displayName: "Support Agent" },
+    create: { email: "support@myteracube.com", displayName: "Support Agent" },
   });
 
   await prisma.teamMembership.upsert({
@@ -107,8 +107,8 @@ async function main() {
 
   const repairTech = await prisma.staffUser.upsert({
     where: { email: "repair@myteracube.com" },
-    update: { active: true, displayName: "Demo Repair Technician" },
-    create: { email: "repair@myteracube.com", displayName: "Demo Repair Technician" },
+    update: { active: true, displayName: "Repair Technician" },
+    create: { email: "repair@myteracube.com", displayName: "Repair Technician" },
   });
   await prisma.teamMembership.upsert({
     where: { staffUserId_team: { staffUserId: repairTech.id, team: "repair" } },

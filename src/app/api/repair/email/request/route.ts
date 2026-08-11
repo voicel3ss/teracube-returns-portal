@@ -37,6 +37,6 @@ export async function POST(request: Request) {
     challengeId: challenge.challengeId,
     expiresAt: challenge.expiresAt.toISOString(),
     delivery: "mock",
-    demoCode: challenge.code,
+    verificationCode: challenge.code,
   });
 }

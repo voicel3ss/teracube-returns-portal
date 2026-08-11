@@ -54,7 +54,7 @@ export class MockIdentityProvider implements IdentityProvider {
   }
 
   async resolveParentAppEntry(entryToken: string) {
-    const index = entryToken === "demo-parent-app" ? 0 : -1;
+    const index = entryToken === "parent-app-preview" ? 0 : -1;
     const record = DEVICE_RECORDS[index];
     return record ? { serial: record.serial, parentEmail: record.parentEmail } : null;
   }

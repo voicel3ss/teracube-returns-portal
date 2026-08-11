@@ -22,5 +22,5 @@ export async function POST(request: Request) {
   if (recent) return Response.json({ error: "A code was just issued. Wait a minute before requesting another." }, { status: 429 });
 
   const challenge = await new OtpService(new PrismaOtpRepository(prisma), secret).issue(email, "staff_login");
-  return Response.json({ accepted: true, challengeId: challenge.challengeId, demoCode: challenge.code, delivery: "mock" });
+  return Response.json({ accepted: true, challengeId: challenge.challengeId, verificationCode: challenge.code, delivery: "local" });
 }

@@ -35,7 +35,7 @@ describe("customer verification assertions", () => {
 
   it("invalidates an address assertion when delivery details change", () => {
     const address = {
-      name: "Teracube Demo",
+      name: "Teracube",
       line1: "16625 Redmond Way",
       line2: "Ste M-175",
       city: "Redmond",

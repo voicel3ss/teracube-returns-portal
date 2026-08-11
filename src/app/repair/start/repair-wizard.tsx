@@ -14,7 +14,7 @@ const faultChoices = [
   ["other", "Other", "Something else"],
 ] as const;
 
-const demoDevices = [
+const sampleDevices = [
   { model: "Teracube 2e", serial: "202112T2E235968", phone: "(206) 555-0142" },
   { model: "Teracube 2s", serial: "202503T2S118842", phone: "(206) 555-0177" },
   { model: "Teracube 4", serial: "202401TC4009317", phone: "(206) 555-0199" },
@@ -63,7 +63,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
   const [emailChallengeId, setEmailChallengeId] = useState<string | null>(null);
   const [emailCode, setEmailCode] = useState("");
   const [emailVerificationToken, setEmailVerificationToken] = useState<string | null>(null);
-  const [demoEmailCode, setDemoEmailCode] = useState<string | null>(null);
+  const [localEmailCode, setLocalEmailCode] = useState<string | null>(null);
   const [device, setDevice] = useState<Device | null>(null);
   const [lookupFailed, setLookupFailed] = useState(false);
   const [faultCategory, setFaultCategory] = useState<FaultCategory | null>(null);
@@ -195,7 +195,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
     setEmailChallengeId(null);
     setEmailCode("");
     setEmailVerificationToken(null);
-    setDemoEmailCode(null);
+    setLocalEmailCode(null);
   }
 
   async function sendEmailCode() {
@@ -210,7 +210,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "We couldn't send a verification code.");
       setEmailChallengeId(body.challengeId);
-      setDemoEmailCode(body.demoCode ?? null);
+      setLocalEmailCode(body.verificationCode ?? null);
       setEmailCode("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "We couldn't send a verification code.");
@@ -233,7 +233,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
       if (!response.ok) throw new Error(body.error ?? "We couldn't verify that email.");
       setEmail(body.email);
       setEmailVerificationToken(body.verificationToken);
-      setDemoEmailCode(null);
+      setLocalEmailCode(null);
       setEmailCode("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "We couldn't verify that email.");
@@ -247,9 +247,9 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
     setAddressValidationToken(null);
   }
 
-  function useDemoAddress() {
+  function useSampleAddress() {
     setAddress({
-      name: "Teracube Demo",
+      name: "Teracube",
       line1: "16625 Redmond Way",
       line2: "Ste M-175",
       city: "Redmond",
@@ -428,9 +428,9 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
                     Verify
                   </button>
                 </div>
-                {demoEmailCode ? (
+                {localEmailCode ? (
                   <p className="mt-3 text-xs leading-5 text-black/50">
-                    Mock delivery: your local verification code is <strong className="font-mono text-black">{demoEmailCode}</strong>. A production email provider will send this privately.
+                    Local verification code: <strong className="font-mono text-black">{localEmailCode}</strong>. A production email provider will send this privately.
                   </p>
                 ) : null}
               </div>
@@ -446,22 +446,22 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
             )}
 
             <div className="mt-5 rounded-xl border border-[var(--green)]/35 bg-[var(--mint)]/20 p-4">
-              <p className="text-sm font-semibold text-black/65">Try a demo device</p>
+              <p className="text-sm font-semibold text-black/65">Try a sample device</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                {demoDevices.map((demoDevice) => {
-                  const demoIdentifier = lookupType === "serial" ? demoDevice.serial : demoDevice.phone;
+                {sampleDevices.map((sampleDevice) => {
+                  const sampleIdentifier = lookupType === "serial" ? sampleDevice.serial : sampleDevice.phone;
                   return (
                     <button
-                      key={demoDevice.serial}
+                      key={sampleDevice.serial}
                       type="button"
                       onClick={() => {
-                        setIdentifier(demoIdentifier);
+                        setIdentifier(sampleIdentifier);
                         setLookupFailed(false);
                       }}
                       className="rounded-lg border border-black/10 bg-white/60 px-3 py-2 text-left transition hover:border-black/25 hover:bg-white"
                     >
-                      <span className="block text-xs font-semibold text-black/70">{demoDevice.model}</span>
-                      <span className="mt-1 block font-mono text-[11px] text-black/50">{demoIdentifier}</span>
+                      <span className="block text-xs font-semibold text-black/70">{sampleDevice.model}</span>
+                      <span className="mt-1 block font-mono text-[11px] text-black/50">{sampleIdentifier}</span>
                     </button>
                   );
                 })}
@@ -672,7 +672,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
                         Verify
                       </button>
                     </div>
-                    {demoEmailCode ? <p className="mt-3 text-xs text-black/50">Mock delivery code: <strong className="font-mono text-black">{demoEmailCode}</strong></p> : null}
+                    {localEmailCode ? <p className="mt-3 text-xs text-black/50">Local verification code: <strong className="font-mono text-black">{localEmailCode}</strong></p> : null}
                   </>
                 ) : (
                   <button type="button" onClick={sendEmailCode} disabled={busy || !email.includes("@")} className="mt-3 h-11 w-full rounded-xl border border-black/15 text-sm font-semibold disabled:opacity-35">
@@ -687,8 +687,8 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
             )}
             <div className="mt-5 flex items-center justify-between gap-4 rounded-xl border border-[var(--green)]/35 bg-[var(--mint)]/20 px-4 py-3 text-sm">
               <p className="leading-5 text-black/60">The local validator recognizes Teracube&apos;s public Redmond contact address.</p>
-              <button type="button" onClick={useDemoAddress} className="shrink-0 font-semibold underline underline-offset-4">
-                Use demo address
+              <button type="button" onClick={useSampleAddress} className="shrink-0 font-semibold underline underline-offset-4">
+                Use sample address
               </button>
             </div>
             <div className="mt-7 grid gap-4 sm:grid-cols-2">

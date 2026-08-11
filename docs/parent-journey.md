@@ -3,7 +3,7 @@
 ## Entry paths
 
 - Public self-service: `/repair/start`
-- Parent-app mock deep link: `/repair/start?entry=demo-parent-app`
+- Parent-app local deep link: `/repair/start?entry=parent-app-preview`
 - CS-generated pre-authenticated links use the same intake and customer-token foundation; the CS creation surface is implemented in Major Step 4.
 
 ## Local mock records

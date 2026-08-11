@@ -41,7 +41,7 @@ export default function Home() {
               <Link href="/repair/start" className="inline-flex h-13 items-center justify-center rounded-full bg-black px-8 font-semibold text-white transition hover:bg-black/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black">
                 Start a request
               </Link>
-              <Link href="/repair/start?entry=demo-parent-app" className="inline-flex h-13 items-center justify-center rounded-full border border-black/15 bg-white px-8 font-semibold text-black/65 transition hover:border-black/30 hover:text-black">
+              <Link href="/repair/start?entry=parent-app-preview" className="inline-flex h-13 items-center justify-center rounded-full border border-black/15 bg-white px-8 font-semibold text-black/65 transition hover:border-black/30 hover:text-black">
                 Continue from Parent app
               </Link>
             </div>
@@ -116,7 +116,7 @@ export default function Home() {
           <div className="mt-10 border-t border-white/15 pt-6">
             <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-7 gap-y-3 text-sm font-medium text-white/65">
               <Link href="/repair/start" className="transition hover:text-white">Start a request</Link>
-              <Link href="/repair/start?entry=demo-parent-app" className="transition hover:text-white">Parent app entry</Link>
+              <Link href="/repair/start?entry=parent-app-preview" className="transition hover:text-white">Parent app entry</Link>
               <a href="https://myteracube.com/pages/contact-us" target="_blank" rel="noreferrer" className="transition hover:text-white">Contact Teracube</a>
               <a href="https://myteracube.com/pages/privacy-policy" target="_blank" rel="noreferrer" className="transition hover:text-white">Privacy</a>
               <Link href="/staff/login" className="transition hover:text-white">Staff sign in</Link>

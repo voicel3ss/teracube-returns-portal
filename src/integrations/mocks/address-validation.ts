@@ -22,7 +22,7 @@ export class MockAddressValidationProvider implements AddressValidationProvider 
     if (!matchesTeracubeAddress) {
       return {
         valid: false as const,
-        reason: "The mock validator could not confirm this address. Use the verified demo address for local testing.",
+        reason: "The local validator could not confirm this address. Use the verified sample address for local testing.",
       };
     }
 
