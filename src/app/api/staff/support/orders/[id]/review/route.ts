@@ -29,6 +29,9 @@ export async function POST(request: Request, { params }: RouteContext<"/api/staf
     }
     await prisma.$transaction([
       prisma.replacementOrder.update({ where: { id }, data: { reviewState: "needs_clarification" } }),
+      prisma.conversationMessage.create({
+        data: { replacementOrderId: id, senderKind: "staff", body: parsed.data.message },
+      }),
       prisma.workItem.updateMany({ where: { replacementOrderId: id, status: { not: "completed" } }, data: { lastActivityAt: new Date() } }),
       prisma.auditEvent.create({
         data: {
@@ -37,7 +40,11 @@ export async function POST(request: Request, { params }: RouteContext<"/api/staf
           action: "replacement_order.clarification_requested",
           entityType: "replacement_order",
           entityId: id,
-          metadata: { ticketId: order.communicationTicketId, messageLength: parsed.data.message.length },
+          metadata: {
+            ticketId: order.communicationTicketId,
+            message: parsed.data.message,
+            messageLength: parsed.data.message.length,
+          },
         },
       }),
     ]);

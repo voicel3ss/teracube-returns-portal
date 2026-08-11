@@ -26,6 +26,12 @@ const faultCategories = [
   "other",
 ] as const;
 
+const photoSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  type: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  data: z.string().max(7_000_000),
+});
+
 const orderSchema = z.object({
   parentEmail: customerEmailSchema,
   emailVerificationToken: z.string().min(1),
@@ -36,6 +42,7 @@ const orderSchema = z.object({
   processTypeId: z.string().uuid(),
   shippingAddress: postalAddressSchema,
   addressValidationToken: z.string().min(1),
+  photos: z.array(photoSchema).max(3).default([]),
 });
 
 export async function POST(request: Request) {
@@ -174,6 +181,21 @@ export async function POST(request: Request) {
         replacementOrderId: created.id,
         team: "support",
         kind: "claim_verification",
+      },
+    });
+
+    await transaction.conversationMessage.create({
+      data: {
+        replacementOrderId: created.id,
+        senderKind: "customer",
+        body: parsed.data.faultText,
+        attachments: {
+          create: parsed.data.photos.map((photo) => {
+            const data = Buffer.from(photo.data, "base64");
+            if (data.byteLength > 5_000_000) throw new Error("Each photo must be 5 MB or smaller.");
+            return { filename: photo.name, contentType: photo.type, byteSize: data.byteLength, data };
+          }),
+        },
       },
     });
 

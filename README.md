@@ -37,6 +37,8 @@ See [`docs/security.md`](docs/security.md) for authentication, authorization, PI
 
 See [`docs/parent-journey.md`](docs/parent-journey.md) for the working customer flow, demo device records, and mock pricing.
 
+See [`docs/repair-workflow.md`](docs/repair-workflow.md) for the repair-team queue, serial ledger, self-QC, terminal outcomes, and batch-ready flow.
+
 See [`docs/support-workflow.md`](docs/support-workflow.md) for the protected work queue, claim verification, customer merge, deposit refund, and secure-link workflow.
 
 For local checkout testing, use the in-form mock email code and the “Use demo address” button. Real delivery and address-provider credentials are connected in the production integrations milestone.

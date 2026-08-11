@@ -46,7 +46,7 @@ export function StaffLoginForm() {
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Unable to sign in.");
-      router.push("/staff/support");
+      router.push(body.destination ?? "/staff/support");
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to sign in.");

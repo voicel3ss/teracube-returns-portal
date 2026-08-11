@@ -1,0 +1,31 @@
+import { z } from "zod";
+import { CustomerTokenService } from "@/auth/customer-token";
+import { PrismaCustomerTokenRepository } from "@/db/auth-repositories";
+import { prisma } from "@/db/prisma";
+
+const photoSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  type: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  data: z.string().max(7_000_000),
+});
+const schema = z.object({ token: z.string().min(1), message: z.string().trim().min(2).max(2000), photos: z.array(photoSchema).max(3).default([]) });
+
+export async function POST(request: Request) {
+  const parsed = schema.safeParse(await request.json());
+  if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid reply." }, { status: 400 });
+  const access = await new CustomerTokenService(new PrismaCustomerTokenRepository(prisma)).authenticate(parsed.data.token);
+  if (!access) return Response.json({ error: "This secure link is invalid or expired." }, { status: 401 });
+
+  const attachments = parsed.data.photos.map((photo) => {
+    const data = Buffer.from(photo.data, "base64");
+    if (data.byteLength > 5_000_000) throw new Error("Each photo must be 5 MB or smaller.");
+    return { filename: photo.name, contentType: photo.type, byteSize: data.byteLength, data };
+  });
+  await prisma.$transaction([
+    prisma.conversationMessage.create({ data: { replacementOrderId: access.replacementOrderId, senderKind: "customer", body: parsed.data.message, attachments: { create: attachments } } }),
+    prisma.replacementOrder.update({ where: { id: access.replacementOrderId }, data: { reviewState: "unreviewed" } }),
+    prisma.workItem.updateMany({ where: { replacementOrderId: access.replacementOrderId, status: { not: "completed" } }, data: { status: "open", snoozedUntil: null, lastActivityAt: new Date() } }),
+    prisma.auditEvent.create({ data: { actorKind: "customer", action: "replacement_order.customer_replied", entityType: "replacement_order", entityId: access.replacementOrderId, metadata: { attachments: attachments.length } } }),
+  ]);
+  return Response.json({ ok: true });
+}

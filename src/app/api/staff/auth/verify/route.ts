@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   );
   if (!verified) return Response.json({ error: "That code is incorrect, expired, or already used." }, { status: 400 });
 
-  const staff = await prisma.staffUser.findUnique({ where: { email } });
+  const staff = await prisma.staffUser.findUnique({ where: { email }, include: { memberships: true } });
   if (!staff?.active) return Response.json({ error: "This staff account is unavailable." }, { status: 403 });
 
   const session = await new StaffSessionService(new PrismaStaffSessionRepository(prisma)).create(staff.id);
@@ -38,5 +38,11 @@ export async function POST(request: Request) {
     path: "/",
     expires: session.expiresAt,
   });
-  return Response.json({ ok: true });
+  const teams = new Set(staff.memberships.map((membership) => membership.team));
+  const destination = teams.has("support") || teams.has("ops_lead") || teams.has("admin")
+    ? "/staff/support"
+    : teams.has("repair")
+      ? "/staff/repair"
+      : "/staff/login";
+  return Response.json({ ok: true, destination });
 }

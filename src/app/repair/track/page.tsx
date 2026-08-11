@@ -4,6 +4,7 @@ import { BrandHeader } from "@/components/brand-header";
 import { PrismaCustomerTokenRepository } from "@/db/auth-repositories";
 import { prisma } from "@/db/prisma";
 import { getCustomerTrackingView } from "@/domain/customer-tracking";
+import { CustomerConversation } from "./customer-conversation";
 
 export const dynamic = "force-dynamic";
 
@@ -37,11 +38,13 @@ export default async function TrackingPage({
       processType: true,
       returnedDevice: { include: { model: true } },
       shipments: { orderBy: { createdAt: "asc" } },
+      messages: { include: { attachments: true }, orderBy: { createdAt: "asc" } },
     },
   });
 
   if (!order) return null;
   const view = getCustomerTrackingView(order.status, order.processType?.flow);
+  const messages = order.messages.map((message) => ({ id: message.id, senderKind: message.senderKind, body: message.body, sentAt: message.createdAt.toISOString(), photos: message.attachments.map((photo) => ({ id: photo.id, name: photo.filename, dataUrl: `data:${photo.contentType};base64,${Buffer.from(photo.data).toString("base64")}` })) }));
 
   return (
     <main className="min-h-screen bg-[#f7f8f5] text-[var(--ink)]">
@@ -55,6 +58,8 @@ export default async function TrackingPage({
           </div>
 
           <div className="border-t border-black/10 p-7 sm:p-10">
+            <CustomerConversation token={token} messages={messages} />
+
             <ol className="grid grid-cols-4 gap-2">
               {milestones.map((milestone, index) => {
                 const number = index + 1;
@@ -96,7 +101,7 @@ export default async function TrackingPage({
             </div>
           </div>
         </section>
-        <p className="mt-6 text-center text-sm text-black/45">Need help? Reply to the Teracube replacement email so everything stays in one conversation.</p>
+        <p className="mt-6 text-center text-sm text-black/45">Need help? Send a message above so everything stays with this request.</p>
       </div>
     </main>
   );

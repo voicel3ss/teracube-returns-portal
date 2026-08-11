@@ -20,7 +20,7 @@ export function SupportOrderActions({ orderId, workItem, staffId, reviewState, i
   const [fault, setFault] = useState(initialFault);
   const [confirmedCoverage, setConfirmedCoverage] = useState(coverage);
   const [freeReason, setFreeReason] = useState("");
-  const [clarification, setClarification] = useState("");
+  const [pauseNote, setPauseNote] = useState("");
   const [note, setNote] = useState("");
   const [refundDollars, setRefundDollars] = useState((refundableDepositInCents / 100).toFixed(2));
   const [customerLink, setCustomerLink] = useState<string | null>(null);
@@ -76,7 +76,17 @@ export function SupportOrderActions({ orderId, workItem, staffId, reviewState, i
         {!mine ? <p className="mt-2 text-center text-xs text-black/40">Claim the item before verifying it.</p> : null}
       </section>}
 
-      {mine && workItem ? <section className="rounded-[1.5rem] border border-black/10 bg-white p-6"><h2 className="font-semibold">Pause or clarify</h2><textarea value={clarification} onChange={(event) => setClarification(event.target.value)} rows={3} placeholder="Notes or customer clarification message" className="mt-3 w-full rounded-xl border border-black/15 p-3 text-sm" /><div className="mt-3 grid grid-cols-3 gap-2">{[1,3,7].map((days) => <button key={days} onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "snooze", days, note: clarification })} disabled={busy || clarification.trim().length < 2} className="rounded-lg border border-black/10 py-2 text-xs font-semibold">Wait {days}d</button>)}</div><button onClick={() => mutate(`/api/staff/support/orders/${orderId}/review`, "POST", { action: "clarify", message: clarification })} disabled={busy || clarification.trim().length < 5} className="mt-3 h-10 w-full rounded-xl border border-black/15 text-sm font-semibold">Request clarification</button></section> : null}
+      {mine && workItem ? (
+        <>
+          <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
+            <h2 className="font-semibold">Pause request</h2>
+            <p className="mt-2 text-sm leading-6 text-black/50">Temporarily remove this item from the active queue. The note is visible only to staff.</p>
+            <label className="mt-4 block text-sm font-semibold" htmlFor="pause-note">Internal pause note</label>
+            <textarea id="pause-note" value={pauseNote} onChange={(event) => setPauseNote(event.target.value)} rows={3} placeholder="Why is this request being paused?" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm outline-none focus:border-[var(--green-strong)]" />
+            <div className="mt-3 grid grid-cols-3 gap-2">{[1,3,7].map((days) => <button key={days} onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "snooze", days, note: pauseNote })} disabled={busy || pauseNote.trim().length < 2} className="rounded-lg border border-black/10 py-2 text-xs font-semibold hover:border-black/30 disabled:opacity-35">Pause {days}d</button>)}</div>
+          </section>
+        </>
+      ) : null}
       <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
         <h2 className="font-semibold">Customer access</h2>
         <p className="mt-2 text-sm leading-6 text-black/50">Create a secure 30-day tracking link for this customer.</p>

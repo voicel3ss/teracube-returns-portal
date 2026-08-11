@@ -1,13 +1,20 @@
 import { z } from "zod";
+import { CustomerTokenService } from "@/auth/customer-token";
+import { PrismaCustomerTokenRepository } from "@/db/auth-repositories";
 import { prisma } from "@/db/prisma";
 import { parseTeracubeSerial } from "@/domain/serial-number";
 import { mockIdentityProvider, mockPlanProvider } from "@/integrations/mocks/device-care";
+import { consolidateCustomerForDevice } from "@/server/customers";
+import { normalizeEmail, verifyVerificationAssertion } from "@/verification/assertion";
+import { customerEmailSchema } from "@/verification/schemas";
 
 const identifySchema = z
   .object({
     serial: z.string().trim().optional(),
     childPhone: z.string().trim().optional(),
     parentAppEntry: z.string().trim().optional(),
+    parentEmail: customerEmailSchema.optional(),
+    emailVerificationToken: z.string().min(1).optional(),
   })
   .refine((value) => value.serial || value.childPhone || value.parentAppEntry, {
     message: "Enter a serial number or child phone number.",
@@ -38,6 +45,32 @@ export async function POST(request: Request) {
 
   const model = models.find((candidate) => candidate.id === serial.value.modelId)!;
   const plan = await mockPlanProvider.getPlanByIccid(identity.iccid);
+
+  if (parsed.data.parentEmail && parsed.data.emailVerificationToken) {
+    const secret = process.env.AUTH_TOKEN_SECRET;
+    const normalizedEmail = normalizeEmail(parsed.data.parentEmail);
+    if (!secret || !verifyVerificationAssertion(parsed.data.emailVerificationToken, "customer_email", normalizedEmail, secret)) {
+      return Response.json({ error: "Verify this email address again before checking the request." }, { status: 403 });
+    }
+    const activeOrder = await prisma.replacementOrder.findFirst({
+      where: { returnedDeviceSerial: serial.value.serial, status: { not: "closed" } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (activeOrder) {
+      const customer = await prisma.$transaction((transaction) =>
+        consolidateCustomerForDevice(transaction, { email: normalizedEmail, serial: serial.value.serial }),
+      );
+      const access = await new CustomerTokenService(new PrismaCustomerTokenRepository(prisma)).issue({
+        customerId: customer.id,
+        replacementOrderId: activeOrder.id,
+      });
+      return Response.json({
+        status: "active_request",
+        orderNumber: activeOrder.orderNumber,
+        trackingUrl: `/repair/track?token=${encodeURIComponent(access.token)}`,
+      });
+    }
+  }
 
   return Response.json({
     status: "identified",

@@ -5,6 +5,7 @@ import { prisma } from "@/db/prisma";
 import { maskPii } from "@/security/pii";
 import { StaffShell } from "../../staff-shell";
 import { SupportOrderActions } from "./support-order-actions";
+import { StaffConversation } from "./staff-conversation";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export default async function SupportOrderPage({ params }: PageProps<"/staff/sup
       returnedDevice: { include: { model: true } },
       processType: true,
       workItems: { where: { status: { not: "completed" } }, include: { assignedToStaff: true }, orderBy: { createdAt: "asc" } },
+      messages: { include: { attachments: true }, orderBy: { createdAt: "asc" } },
     },
   });
   if (!order) notFound();
@@ -30,6 +32,7 @@ export default async function SupportOrderPage({ params }: PageProps<"/staff/sup
   });
   const activeItem = order.workItems[0] ?? null;
   const coverage = order.processType?.slug.startsWith("warranty-") ? "warranty" : "accident";
+  const conversation = order.messages.map((message) => ({ id: message.id, senderKind: message.senderKind, body: message.body, sentAt: message.createdAt.toISOString(), photos: message.attachments.map((photo) => ({ id: photo.id, name: photo.filename, dataUrl: `data:${photo.contentType};base64,${Buffer.from(photo.data).toString("base64")}` })) }));
 
   return (
     <StaffShell name={staff.displayName}>
@@ -67,6 +70,8 @@ export default async function SupportOrderPage({ params }: PageProps<"/staff/sup
                 ))}
               </ol>
             </section>
+
+            <StaffConversation orderId={order.id} messages={conversation} canReply={activeItem?.assignedToStaffId === staff.id} />
           </div>
 
           <aside>

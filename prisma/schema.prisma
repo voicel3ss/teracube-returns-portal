@@ -271,12 +271,40 @@ model ReplacementOrder {
   shipments                Shipment[]
   accessTokens             CustomerAccessToken[]
   workItems                WorkItem[]
+  messages                 ConversationMessage[]
 
   @@index([customerId, createdAt])
   @@index([status, reviewState])
   @@index([returnedDeviceSerial])
   @@index([outboundDeviceSerial])
   @@map("replacement_orders")
+}
+
+model ConversationMessage {
+  id                 String           @id @default(uuid()) @db.Uuid
+  replacementOrderId String           @map("replacement_order_id") @db.Uuid
+  senderKind         String           @map("sender_kind")
+  body               String
+  createdAt          DateTime         @default(now()) @map("created_at")
+  replacementOrder   ReplacementOrder @relation(fields: [replacementOrderId], references: [id], onDelete: Cascade)
+  attachments        MessageAttachment[]
+
+  @@index([replacementOrderId, createdAt])
+  @@map("conversation_messages")
+}
+
+model MessageAttachment {
+  id          String              @id @default(uuid()) @db.Uuid
+  messageId   String              @map("message_id") @db.Uuid
+  filename    String
+  contentType String              @map("content_type")
+  byteSize    Int                 @map("byte_size")
+  data        Bytes               @db.ByteA
+  createdAt   DateTime            @default(now()) @map("created_at")
+  message     ConversationMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("message_attachments")
 }
 
 model Repair {

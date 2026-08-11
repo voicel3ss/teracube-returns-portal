@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-export function StaffShell({ name, children }: { name: string; children: React.ReactNode }) {
+export function StaffShell({ name, children, area = "support" }: { name: string; children: React.ReactNode; area?: "support" | "repair" }) {
   const router = useRouter();
   async function signOut() {
     await fetch("/api/staff/auth/logout", { method: "POST" });
@@ -15,10 +15,11 @@ export function StaffShell({ name, children }: { name: string; children: React.R
       <header className="border-b border-black/10 border-t-[3px] border-t-[var(--green)] bg-white">
         <div className="mx-auto flex min-h-20 max-w-7xl items-center justify-between gap-5 px-5 sm:px-7">
           <div className="flex items-center gap-7">
-            <Link href="/staff/support" className="font-semibold tracking-[-0.02em]">teracube <span className="text-black/35">/ support</span></Link>
+            <Link href={area === "repair" ? "/staff/repair" : "/staff/support"} className="font-semibold tracking-[-0.02em]">teracube <span className="text-black/35">/ {area}</span></Link>
             <nav className="hidden gap-5 text-sm font-medium text-black/50 sm:flex">
-              <Link href="/staff/support" className="text-black">Queue</Link>
-              <Link href="/staff/support/customers">Customers</Link>
+              <Link href="/staff/support" className={area === "support" ? "text-black" : ""}>Support</Link>
+              {area === "support" ? <Link href="/staff/support/customers">Customers</Link> : null}
+              <Link href="/staff/repair" className={area === "repair" ? "text-black" : ""}>Repair</Link>
             </nav>
           </div>
           <div className="flex items-center gap-3 text-sm">

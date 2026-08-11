@@ -14,6 +14,12 @@ const faultChoices = [
   ["other", "Other", "Something else"],
 ] as const;
 
+const demoDevices = [
+  { model: "Teracube 2e", serial: "202112T2E235968", phone: "(206) 555-0142" },
+  { model: "Teracube 2s", serial: "202503T2S118842", phone: "(206) 555-0177" },
+  { model: "Teracube 4", serial: "202401TC4009317", phone: "(206) 555-0199" },
+] as const;
+
 type FaultCategory = (typeof faultChoices)[number][0];
 type Device = {
   serial: string;
@@ -40,6 +46,15 @@ function money(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
+async function encodePhotos(files: File[]) {
+  return Promise.all(files.map((file) => new Promise<{ name: string; type: string; data: string }>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({ name: file.name, type: file.type, data: String(reader.result).split(",")[1] ?? "" });
+    reader.onerror = () => reject(new Error("A photo could not be read."));
+    reader.readAsDataURL(file);
+  })));
+}
+
 export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
   const [step, setStep] = useState<Step>("identify");
   const [lookupType, setLookupType] = useState<"serial" | "phone">("serial");
@@ -53,6 +68,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
   const [lookupFailed, setLookupFailed] = useState(false);
   const [faultCategory, setFaultCategory] = useState<FaultCategory | null>(null);
   const [faultText, setFaultText] = useState("");
+  const [faultPhotos, setFaultPhotos] = useState<File[]>([]);
   const [coverage, setCoverage] = useState<"warranty" | "accident" | null>(null);
   const [options, setOptions] = useState<ReplacementOption[]>([]);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
@@ -89,14 +105,18 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
             appEntry
               ? { parentAppEntry: appEntry }
               : lookupType === "serial"
-                ? { serial: identifier }
-                : { childPhone: identifier },
+                ? { serial: identifier, parentEmail: email, emailVerificationToken }
+                : { childPhone: identifier, parentEmail: email, emailVerificationToken },
           ),
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error ?? "We couldn't check that device.");
         if (body.status === "unidentified") {
           setLookupFailed(true);
+          return;
+        }
+        if (body.status === "active_request") {
+          setActiveRequest({ orderNumber: body.orderNumber, trackingUrl: body.trackingUrl });
           return;
         }
         setDevice(body.device);
@@ -109,7 +129,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
         setBusy(false);
       }
     },
-    [identifier, lookupType],
+    [email, emailVerificationToken, identifier, lookupType],
   );
 
   useEffect(() => {
@@ -267,6 +287,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
     setBusy(true);
     setError(null);
     try {
+      const photos = await encodePhotos(faultPhotos);
       const response = await fetch("/api/repair/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -280,6 +301,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
           emailVerificationToken,
           shippingAddress: { ...address, country: "US" },
           addressValidationToken,
+          photos,
         }),
       });
       const body = await response.json();
@@ -317,14 +339,23 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
       ) : null}
 
       <section className="rounded-[1.75rem] border border-black/10 bg-white p-6 shadow-[0_20px_60px_rgba(20,30,22,0.07)] sm:p-10">
-        {parentAppEntry && busy && step === "identify" ? (
+        {activeRequest ? (
+          <div role="status" className="rounded-2xl border border-[var(--green-strong)]/25 bg-[var(--mint)]/25 p-6">
+            <p className="text-sm font-semibold text-[var(--green-strong)]">Existing request found</p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">A request is already in progress for this device</h1>
+            <p className="mt-3 text-sm leading-6 text-black/60">Your verified email is now connected to order #{String(activeRequest.orderNumber).padStart(4, "0")}. Continue to its update page instead of starting another request.</p>
+            <Link href={activeRequest.trackingUrl} className="mt-5 inline-flex h-11 items-center justify-center rounded-full bg-black px-6 text-sm font-semibold text-white">View existing request</Link>
+          </div>
+        ) : null}
+
+        {!activeRequest && parentAppEntry && busy && step === "identify" ? (
           <div className="py-16 text-center">
             <div className="mx-auto size-8 animate-spin rounded-full border-2 border-black/15 border-t-[var(--green-strong)]" />
             <p className="mt-5 text-sm text-black/55">Finding the device from your Parent app…</p>
           </div>
         ) : null}
 
-        {step === "identify" && !(parentAppEntry && busy) ? (
+        {!activeRequest && step === "identify" && !(parentAppEntry && busy) ? (
           <div>
             <p className="text-sm font-semibold text-[var(--green-strong)]">Let’s find the device</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">Which device needs care?</h1>
@@ -414,8 +445,27 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
               </button>
             )}
 
-            <div className="mt-5 rounded-xl border border-[var(--green)]/35 bg-[var(--mint)]/20 px-4 py-3 text-sm text-black/60">
-              Demo: use <strong>202112T2E235968</strong> or <strong>(206) 555-0142</strong>.
+            <div className="mt-5 rounded-xl border border-[var(--green)]/35 bg-[var(--mint)]/20 p-4">
+              <p className="text-sm font-semibold text-black/65">Try a demo device</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {demoDevices.map((demoDevice) => {
+                  const demoIdentifier = lookupType === "serial" ? demoDevice.serial : demoDevice.phone;
+                  return (
+                    <button
+                      key={demoDevice.serial}
+                      type="button"
+                      onClick={() => {
+                        setIdentifier(demoIdentifier);
+                        setLookupFailed(false);
+                      }}
+                      className="rounded-lg border border-black/10 bg-white/60 px-3 py-2 text-left transition hover:border-black/25 hover:bg-white"
+                    >
+                      <span className="block text-xs font-semibold text-black/70">{demoDevice.model}</span>
+                      <span className="mt-1 block font-mono text-[11px] text-black/50">{demoIdentifier}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {lookupFailed ? (
@@ -511,6 +561,26 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
               rows={4}
               className="mt-2 w-full resize-none rounded-xl border border-black/15 p-4 outline-none focus:border-[var(--green-strong)] focus:ring-3 focus:ring-[var(--mint)]/40"
             />
+            <label className="mt-5 block text-sm font-semibold" htmlFor="fault-photos">Photos <span className="font-normal text-black/40">(optional, up to 3)</span></label>
+            <input
+              id="fault-photos"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []).slice(0, 3);
+                if (files.some((file) => file.size > 5_000_000)) {
+                  setError("Each photo must be 5 MB or smaller.");
+                  event.target.value = "";
+                  setFaultPhotos([]);
+                  return;
+                }
+                setError(null);
+                setFaultPhotos(files);
+              }}
+              className="mt-2 block w-full rounded-xl border border-dashed border-black/20 bg-black/[0.025] p-4 text-sm file:mr-4 file:rounded-full file:border-0 file:bg-black file:px-4 file:py-2 file:font-semibold file:text-white"
+            />
+            {faultPhotos.length > 0 ? <p className="mt-2 text-xs text-black/45">{faultPhotos.length} photo{faultPhotos.length === 1 ? "" : "s"} selected</p> : null}
             <button
               type="button"
               onClick={loadOptions}
@@ -686,17 +756,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
           </div>
         ) : null}
 
-        {activeRequest ? (
-          <div role="status" className="mt-5 rounded-2xl border border-[var(--green-strong)]/25 bg-[var(--mint)]/25 p-5">
-            <h2 className="font-semibold">A request is already in progress for this device</h2>
-            <p className="mt-2 text-sm leading-6 text-black/60">
-              We connected your verified email to order #{String(activeRequest.orderNumber).padStart(4, "0")} instead of creating a duplicate request.
-            </p>
-            <Link href={activeRequest.trackingUrl} className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-black px-5 text-sm font-semibold text-white">
-              View existing request
-            </Link>
-          </div>
-        ) : error ? (
+        {error ? (
           <div role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {error}
           </div>

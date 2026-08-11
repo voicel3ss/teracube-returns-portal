@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getAuthorizedStaff } from "@/auth/staff-request";
+import { getStaffContext } from "@/auth/staff-request";
+import { hasPermission } from "@/auth/permissions";
 import { prisma } from "@/db/prisma";
 import { maskPii } from "@/security/pii";
 import { StaffShell } from "./staff-shell";
@@ -17,8 +18,12 @@ const kindLabels = {
 } as const;
 
 export default async function SupportQueuePage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const staff = await getAuthorizedStaff("order:view_all");
+  const staff = await getStaffContext();
   if (!staff) redirect("/staff/login");
+  if (!hasPermission(staff.teams, "order:view_all")) {
+    if (hasPermission(staff.teams, "repair:record")) redirect("/staff/repair");
+    redirect("/staff/login");
+  }
   const { q = "" } = await searchParams;
   const now = new Date();
   const [items, searchResults] = await Promise.all([
