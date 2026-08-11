@@ -45,6 +45,8 @@ See [`docs/automation-and-webhooks.md`](docs/automation-and-webhooks.md) for sig
 
 See [`docs/admin-and-oversight.md`](docs/admin-and-oversight.md) for management alerts, oversight reports, and editable workflow policy.
 
+See [`docs/release-readiness.md`](docs/release-readiness.md) for security controls, CI, container deployment, health checks, and the production launch gate.
+
 See [`docs/support-workflow.md`](docs/support-workflow.md) for the protected work queue, claim verification, customer merge, deposit refund, and secure-link workflow.
 
 For local checkout testing, use the in-form verification code and the “Use sample address” button. Real delivery and address-provider credentials are connected in the production integrations milestone.

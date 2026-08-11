@@ -16,6 +16,8 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:verify": "tsx scripts/verify-database.ts"
+    ,"verify": "npm run typecheck && npm run lint && npm test && npm run db:verify && npm run build"
+    ,"production:check": "tsx scripts/check-production-env.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
