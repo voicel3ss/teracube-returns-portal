@@ -22,6 +22,7 @@ export default async function SupportQueuePage({ searchParams }: { searchParams:
   if (!staff) redirect("/staff/login");
   if (!hasPermission(staff.teams, "order:view_all")) {
     if (hasPermission(staff.teams, "repair:record")) redirect("/staff/repair");
+    if (hasPermission(staff.teams, "shipment:dispatch")) redirect("/staff/logistics");
     redirect("/staff/login");
   }
   const { q = "" } = await searchParams;

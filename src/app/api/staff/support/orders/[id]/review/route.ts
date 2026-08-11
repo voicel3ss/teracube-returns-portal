@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getAuthorizedStaff } from "@/auth/staff-request";
 import { prisma } from "@/db/prisma";
-import { mockHelpdeskProvider } from "@/integrations/mocks/device-care";
+import { mockHelpdeskProvider, mockObjectStorageProvider, mockShippingProvider } from "@/integrations/mocks/device-care";
 import { validateClaimReview } from "@/domain/support-review";
 
 const schema = z.discriminatedUnion("action", [
@@ -61,6 +61,12 @@ export async function POST(request: Request, { params }: RouteContext<"/api/staf
   });
   if (validationError) return Response.json({ error: validationError }, { status: 409 });
 
+  const label = await mockShippingProvider.createInboundLabel({ orderId: id, destinationCode: "TERACUBE-RETURNS" });
+  const labelKey = `labels/inbound/${id}.pdf`;
+  const qrKey = `labels/inbound/${id}.txt`;
+  await mockObjectStorageProvider.put({ key: labelKey, bytes: label.labelBytes, contentType: "application/pdf" });
+  if (label.qrCodeBytes) await mockObjectStorageProvider.put({ key: qrKey, bytes: label.qrCodeBytes, contentType: "text/plain" });
+
   await prisma.$transaction([
     prisma.replacementOrder.update({
       where: { id },
@@ -70,6 +76,12 @@ export async function POST(request: Request, { params }: RouteContext<"/api/staf
         freeOutcomeReason: parsed.data.freeOutcomeReason || null,
       },
     }),
+    prisma.shipment.upsert({
+      where: { id: `00000000-0000-4000-8000-${id.replaceAll("-", "").slice(0, 12)}` },
+      update: { status: "label_ready", trackingNumber: label.trackingNumber, labelObjectKey: labelKey, qrCodeObjectKey: label.qrCodeBytes ? qrKey : null },
+      create: { id: `00000000-0000-4000-8000-${id.replaceAll("-", "").slice(0, 12)}`, replacementOrderId: id, type: "inbound", status: "label_ready", provider: "local-shipping", providerShipmentId: label.providerShipmentId, trackingNumber: label.trackingNumber, labelObjectKey: labelKey, qrCodeObjectKey: label.qrCodeBytes ? qrKey : null },
+    }),
+    prisma.conversationMessage.create({ data: { replacementOrderId: id, senderKind: "system", body: `Your request is verified. Return tracking: ${label.trackingNumber}. Factory-reset the device, keep the SIM, and pack it safely.` } }),
     prisma.workItem.updateMany({
       where: { replacementOrderId: id, kind: "claim_verification", status: { not: "completed" } },
       data: { status: "completed", lastActivityAt: new Date(), snoozedUntil: null },

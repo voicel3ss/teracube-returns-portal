@@ -4,6 +4,8 @@ import type {
   IdentityProvider,
   Money,
   PlanProvider,
+  ShippingProvider,
+  ObjectStorageProvider,
 } from "../contracts";
 
 type MockDeviceRecord = {
@@ -95,7 +97,23 @@ export class MockHelpdeskProvider implements HelpdeskProvider {
   }
 }
 
+export class MockShippingProvider implements ShippingProvider {
+  async createInboundLabel(input: { orderId: string; destinationCode: string }) {
+    const trackingNumber = `9400${input.orderId.replace(/-/g, "").slice(0, 18)}`;
+    return { providerShipmentId: `local-shipment-${input.orderId}`, trackingNumber, labelBytes: new TextEncoder().encode(`Teracube return ${input.orderId} to ${input.destinationCode}`), qrCodeBytes: new TextEncoder().encode(trackingNumber) };
+  }
+  async getTracking() { return { status: "created" as const, events: [] }; }
+}
+
+export class MockObjectStorageProvider implements ObjectStorageProvider {
+  private objects = new Map<string, Uint8Array>();
+  async put(input: { key: string; bytes: Uint8Array; contentType: string }) { this.objects.set(input.key, input.bytes); }
+  async createSignedReadUrl(key: string) { return this.objects.has(key) ? `/api/local-objects/${encodeURIComponent(key)}` : ""; }
+}
+
 export const mockIdentityProvider = new MockIdentityProvider();
 export const mockPlanProvider = new MockPlanProvider();
 export const mockCommerceProvider = new MockCommerceProvider();
 export const mockHelpdeskProvider = new MockHelpdeskProvider();
+export const mockShippingProvider = new MockShippingProvider();
+export const mockObjectStorageProvider = new MockObjectStorageProvider();

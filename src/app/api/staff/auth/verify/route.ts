@@ -43,6 +43,8 @@ export async function POST(request: Request) {
     ? "/staff/support"
     : teams.has("repair")
       ? "/staff/repair"
-      : "/staff/login";
+      : teams.has("logistics")
+        ? "/staff/logistics"
+        : "/staff/login";
   return Response.json({ ok: true, destination });
 }

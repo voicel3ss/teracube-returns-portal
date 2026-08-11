@@ -39,6 +39,10 @@ See [`docs/parent-journey.md`](docs/parent-journey.md) for the working customer 
 
 See [`docs/repair-workflow.md`](docs/repair-workflow.md) for the repair-team queue, serial ledger, self-QC, terminal outcomes, and batch-ready flow.
 
+See [`docs/logistics-workflow.md`](docs/logistics-workflow.md) for inbound reconciliation, outbound dispatch, and internal-transfer label handling.
+
+See [`docs/automation-and-webhooks.md`](docs/automation-and-webhooks.md) for signed provider events, idempotency, tracking updates, and scheduled reminders and escalations.
+
 See [`docs/support-workflow.md`](docs/support-workflow.md) for the protected work queue, claim verification, customer merge, deposit refund, and secure-link workflow.
 
 For local checkout testing, use the in-form verification code and the “Use sample address” button. Real delivery and address-provider credentials are connected in the production integrations milestone.

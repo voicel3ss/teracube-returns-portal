@@ -10,6 +10,7 @@ export default async function RepairPage() {
   const staff = await getStaffContext(); if (!staff) redirect("/staff/login");
   if (!hasPermission(staff.teams, "repair:record")) {
     if (hasPermission(staff.teams, "order:view_all")) redirect("/staff/support");
+    if (hasPermission(staff.teams, "shipment:dispatch")) redirect("/staff/logistics");
     redirect("/staff/login");
   }
   const repairs = await prisma.repair.findMany({ include: { device: { include: { model: true } } }, orderBy: { updatedAt: "desc" }, take: 100 });

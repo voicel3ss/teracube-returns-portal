@@ -350,6 +350,9 @@ model Shipment {
   provider           String?
   providerShipmentId String?                 @map("provider_shipment_id")
   labelObjectKey     String?                 @map("label_object_key")
+  labelFilename      String?                 @map("label_filename")
+  labelContentType   String?                 @map("label_content_type")
+  labelData          Bytes?                  @map("label_data") @db.ByteA
   qrCodeObjectKey    String?                 @map("qr_code_object_key")
   costInCents        Int?                    @map("cost_in_cents")
   deliveredAt        DateTime?               @map("delivered_at")
@@ -512,4 +515,27 @@ model AuditEvent {
   @@index([entityType, entityId, occurredAt])
   @@index([actorStaffId, occurredAt])
   @@map("audit_events")
+}
+
+model ProviderEvent {
+  id              String   @id @default(uuid()) @db.Uuid
+  provider        String
+  providerEventId String   @map("provider_event_id")
+  eventType       String   @map("event_type")
+  payload         Json
+  processedAt     DateTime @default(now()) @map("processed_at")
+
+  @@unique([provider, providerEventId])
+  @@index([provider, processedAt])
+  @@map("provider_events")
+}
+
+model AutomationMarker {
+  id                 String   @id @default(uuid()) @db.Uuid
+  replacementOrderId String   @map("replacement_order_id") @db.Uuid
+  kind               String
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@unique([replacementOrderId, kind])
+  @@map("automation_markers")
 }

@@ -10,6 +10,24 @@ const photoSchema = z.object({
 });
 const schema = z.object({ token: z.string().min(1), message: z.string().trim().min(2).max(2000), photos: z.array(photoSchema).max(3).default([]) });
 
+export async function GET(request: Request) {
+  const token = new URL(request.url).searchParams.get("token") ?? "";
+  const access = await new CustomerTokenService(new PrismaCustomerTokenRepository(prisma)).authenticate(token);
+  if (!access) return Response.json({ error: "This secure link is invalid or expired." }, { status: 401 });
+  const messages = await prisma.conversationMessage.findMany({
+    where: { replacementOrderId: access.replacementOrderId },
+    include: { attachments: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return Response.json({ messages: messages.map((message) => ({
+    id: message.id,
+    senderKind: message.senderKind,
+    body: message.body,
+    sentAt: message.createdAt.toISOString(),
+    photos: message.attachments.map((photo) => ({ id: photo.id, name: photo.filename, dataUrl: `data:${photo.contentType};base64,${Buffer.from(photo.data).toString("base64")}` })),
+  })) });
+}
+
 export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid reply." }, { status: 400 });

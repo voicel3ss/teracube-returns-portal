@@ -12,6 +12,12 @@ export async function POST(request: Request) {
   const repairs = await prisma.repair.findMany({ where: { deviceSerial: { in: serials }, status: { in: ["in_repair", "qc_pass"] }, repairTeamResolution: { not: null } }, orderBy: { createdAt: "desc" } });
   const eligible = [...new Map(repairs.map((repair) => [repair.deviceSerial, repair])).values()];
   if (eligible.length !== serials.length) return Response.json({ error: "Every serial needs an active repair with a recorded resolution before batch QC." }, { status: 409 });
-  await prisma.$transaction([...eligible.map((repair) => prisma.repair.update({ where: { id: repair.id }, data: { status: "back_to_stock", completedAt: new Date() } })), prisma.device.updateMany({ where: { serial: { in: serials } }, data: { circulationState: "in_stock", grade: "refurbished", currentOwnerId: null } }), prisma.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "repair.batch_ready", entityType: "device_batch", entityId: crypto.randomUUID(), metadata: { serials, count: serials.length } } })]);
-  return Response.json({ ok: true, count: serials.length });
+  const shipmentId = crypto.randomUUID();
+  await prisma.$transaction([
+    ...eligible.map((repair) => prisma.repair.update({ where: { id: repair.id }, data: { status: "back_to_stock", completedAt: new Date() } })),
+    prisma.device.updateMany({ where: { serial: { in: serials } }, data: { circulationState: "in_stock", grade: "refurbished", currentOwnerId: null } }),
+    prisma.shipment.create({ data: { id: shipmentId, type: "internal_transfer", status: "created", provider: "manual-upload", units: { create: serials.map((deviceSerial) => ({ deviceSerial })) } } }),
+    prisma.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "repair.batch_ready", entityType: "shipment", entityId: shipmentId, metadata: { serials, count: serials.length } } }),
+  ]);
+  return Response.json({ ok: true, count: serials.length, shipmentId });
 }
