@@ -1,5 +1,3 @@
-const REFUND_ELIGIBLE_STATUSES = new Set(["return_in_transit", "return_received"]);
-
 export function validateClaimReview(input: {
   configuredCoverage: "warranty" | "accident";
   confirmedCoverage: "warranty" | "accident";
@@ -21,13 +19,15 @@ export function validateDepositRefund(input: {
   depositInCents: number;
   alreadyRefundedInCents: number;
   amountPaidInCents: number;
+  refundGate?: "return_in_transit" | "return_received";
 }): { refundableInCents: number; error: string | null } {
   const refundableInCents = Math.max(
     0,
     Math.min(input.depositInCents, input.amountPaidInCents) - input.alreadyRefundedInCents,
   );
-  if (!REFUND_ELIGIBLE_STATUSES.has(input.status)) {
-    return { refundableInCents, error: "The return must be in transit or received before its deposit can be refunded." };
+  const eligible = input.refundGate === "return_received" ? input.status === "return_received" : ["return_in_transit", "return_received"].includes(input.status);
+  if (!eligible) {
+    return { refundableInCents, error: input.refundGate === "return_received" ? "The return must be received before its deposit can be refunded." : "The return must be in transit or received before its deposit can be refunded." };
   }
   if (!Number.isInteger(input.amountInCents) || input.amountInCents <= 0) {
     return { refundableInCents, error: "Enter a positive refund amount in cents." };

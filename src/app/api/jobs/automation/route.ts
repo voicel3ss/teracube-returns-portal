@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { prisma } from "@/db/prisma";
-import { automationPolicy, olderThan } from "@/automation/policy";
+import { olderThan } from "@/automation/policy";
 
 function authorized(request: Request): boolean {
   const secret = process.env.AUTOMATION_JOB_SECRET ?? "";
@@ -12,23 +12,24 @@ function authorized(request: Request): boolean {
 export async function POST(request: Request) {
   if (!authorized(request)) return Response.json({ error: "Job authorization required." }, { status: 401 });
   const now = new Date();
+  const config = await prisma.appConfig.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } });
   const orders = await prisma.replacementOrder.findMany({ where: { status: { not: "closed" }, submittedAt: { not: null } }, include: { shipments: true } });
   let reminders = 0; let escalations = 0;
   for (const order of orders) {
     const started = order.submittedAt ?? order.createdAt;
     const returnStarted = order.shipments.some((shipment) => shipment.type === "inbound" && ["in_transit", "delivered", "received"].includes(shipment.status));
-    if (!returnStarted && olderThan(started, automationPolicy.returnReminderDays, now)) {
+    if (!returnStarted && olderThan(started, config.returnReminderDays, now)) {
       const exists = await prisma.automationMarker.findUnique({ where: { replacementOrderId_kind: { replacementOrderId: order.id, kind: "return_day_4_reminder" } } });
-      if (!exists) { await prisma.$transaction([prisma.automationMarker.create({ data: { replacementOrderId: order.id, kind: "return_day_4_reminder" } }), prisma.conversationMessage.create({ data: { replacementOrderId: order.id, senderKind: "system", body: "Reminder: please send your original device using the Teracube return label. Keep your SIM and pack the device safely." } }), prisma.auditEvent.create({ data: { actorKind: "automation", action: "replacement_order.return_reminder", entityType: "replacement_order", entityId: order.id, metadata: { day: automationPolicy.returnReminderDays } } })]); reminders++; }
+      if (!exists) { await prisma.$transaction([prisma.automationMarker.create({ data: { replacementOrderId: order.id, kind: "return_day_4_reminder" } }), prisma.conversationMessage.create({ data: { replacementOrderId: order.id, senderKind: "system", body: `Reminder: please send your original device using the Teracube return label. ${config.returnInstructions}` } }), prisma.auditEvent.create({ data: { actorKind: "automation", action: "replacement_order.return_reminder", entityType: "replacement_order", entityId: order.id, metadata: { day: config.returnReminderDays } } })]); reminders++; }
     }
-    const needsEscalation = (!returnStarted && olderThan(started, automationPolicy.returnEscalationDays, now)) || (order.status === "unidentified" && olderThan(order.updatedAt, automationPolicy.unidentifiedEscalationDays, now));
+    const needsEscalation = (!returnStarted && olderThan(started, config.returnEscalationDays, now)) || (order.status === "unidentified" && olderThan(order.updatedAt, config.unidentifiedEscalationDays, now));
     if (needsEscalation) {
       const kind = order.status === "unidentified" ? "unidentified_escalation" : "return_day_6_escalation";
       const exists = await prisma.automationMarker.findUnique({ where: { replacementOrderId_kind: { replacementOrderId: order.id, kind } } });
       if (!exists) { await prisma.$transaction([prisma.automationMarker.create({ data: { replacementOrderId: order.id, kind } }), prisma.auditEvent.create({ data: { actorKind: "automation", action: `replacement_order.${kind}`, entityType: "replacement_order", entityId: order.id } })]); escalations++; }
     }
   }
-  const staleBefore = new Date(now.getTime() - automationPolicy.staleClaimDays * 86400000);
+  const staleBefore = new Date(now.getTime() - config.staleClaimDays * 86400000);
   const staleClaims = await prisma.workItem.findMany({ where: { status: "claimed", lastActivityAt: { lte: staleBefore } } });
   for (const item of staleClaims) {
     const kind = `stale_claim_${item.id}`;

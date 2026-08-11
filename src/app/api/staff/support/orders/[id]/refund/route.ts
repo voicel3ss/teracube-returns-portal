@@ -12,7 +12,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return Response.json({ error: "Enter a valid refund amount." }, { status: 400 });
   const { id } = await params;
-  const order = await prisma.replacementOrder.findUnique({ where: { id }, include: { processType: true } });
+  const [order, config] = await Promise.all([prisma.replacementOrder.findUnique({ where: { id }, include: { processType: true } }), prisma.appConfig.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } })]);
   if (!order?.processType) return Response.json({ error: "Order not found." }, { status: 404 });
   if (!order.paymentReference) return Response.json({ error: "This order has no captured payment to refund." }, { status: 409 });
 
@@ -22,6 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     depositInCents: order.processType.depositInCents,
     alreadyRefundedInCents: order.depositRefundedInCents,
     amountPaidInCents: order.amountPaidInCents,
+    refundGate: config.depositRefundGate === "return_received" ? "return_received" : "return_in_transit",
   });
   if (validation.error) return Response.json({ error: validation.error, refundableInCents: validation.refundableInCents }, { status: 409 });
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-export function StaffShell({ name, children, area = "support" }: { name: string; children: React.ReactNode; area?: "support" | "repair" | "logistics" }) {
+export function StaffShell({ name, children, area = "support" }: { name: string; children: React.ReactNode; area?: "support" | "repair" | "logistics" | "oversight" | "admin" }) {
   const router = useRouter();
   async function signOut() {
     await fetch("/api/staff/auth/logout", { method: "POST" });
@@ -21,6 +21,8 @@ export function StaffShell({ name, children, area = "support" }: { name: string;
               {area === "support" ? <Link href="/staff/support/customers">Customers</Link> : null}
               <Link href="/staff/repair" className={area === "repair" ? "text-black" : ""}>Repair</Link>
               <Link href="/staff/logistics" className={area === "logistics" ? "text-black" : ""}>Logistics</Link>
+              <Link href="/staff/oversight" className={area === "oversight" ? "text-black" : ""}>Oversight</Link>
+              <Link href="/staff/admin" className={area === "admin" ? "text-black" : ""}>Admin</Link>
             </nav>
           </div>
           <div className="flex items-center gap-3 text-sm">

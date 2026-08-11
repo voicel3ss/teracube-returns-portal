@@ -43,6 +43,8 @@ See [`docs/logistics-workflow.md`](docs/logistics-workflow.md) for inbound recon
 
 See [`docs/automation-and-webhooks.md`](docs/automation-and-webhooks.md) for signed provider events, idempotency, tracking updates, and scheduled reminders and escalations.
 
+See [`docs/admin-and-oversight.md`](docs/admin-and-oversight.md) for management alerts, oversight reports, and editable workflow policy.
+
 See [`docs/support-workflow.md`](docs/support-workflow.md) for the protected work queue, claim verification, customer merge, deposit refund, and secure-link workflow.
 
 For local checkout testing, use the in-form verification code and the “Use sample address” button. Real delivery and address-provider credentials are connected in the production integrations milestone.

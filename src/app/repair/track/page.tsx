@@ -32,7 +32,7 @@ export default async function TrackingPage({
     );
   }
 
-  const order = await prisma.replacementOrder.findFirst({
+  const [order, config] = await Promise.all([prisma.replacementOrder.findFirst({
     where: { id: access.replacementOrderId, customerId: access.customerId },
     include: {
       processType: true,
@@ -40,7 +40,7 @@ export default async function TrackingPage({
       shipments: { orderBy: { createdAt: "asc" } },
       messages: { include: { attachments: true }, orderBy: { createdAt: "asc" } },
     },
-  });
+  }), prisma.appConfig.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } })]);
 
   if (!order) return null;
   const view = getCustomerTrackingView(order.status, order.processType?.flow);
@@ -92,11 +92,7 @@ export default async function TrackingPage({
 
             <div className="mt-6 rounded-2xl bg-[#f7f8f5] p-5 sm:p-6">
               <h2 className="font-semibold">Before returning your device</h2>
-              <ul className="mt-3 grid gap-2 text-sm leading-6 text-black/55 sm:grid-cols-3">
-                <li>• Factory-reset the phone</li>
-                <li>• Keep your SIM card</li>
-                <li>• Pack the device safely</li>
-              </ul>
+              <p className="mt-3 text-sm leading-6 text-black/55">{config.returnInstructions}</p>
               <p className="mt-4 text-xs text-black/40">Your Teracube-provided label appears here after verification.</p>
             </div>
           </div>

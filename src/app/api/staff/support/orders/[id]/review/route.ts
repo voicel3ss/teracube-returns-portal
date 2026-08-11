@@ -52,6 +52,7 @@ export async function POST(request: Request, { params }: RouteContext<"/api/staf
   }
 
   if (!order.processType) return Response.json({ error: "Identify the device and replacement process before verification." }, { status: 409 });
+  const config = await prisma.appConfig.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } });
   const configuredCoverage = order.processType.slug.startsWith("warranty-") ? "warranty" : "accident";
   const validationError = validateClaimReview({
     configuredCoverage,
@@ -81,7 +82,7 @@ export async function POST(request: Request, { params }: RouteContext<"/api/staf
       update: { status: "label_ready", trackingNumber: label.trackingNumber, labelObjectKey: labelKey, qrCodeObjectKey: label.qrCodeBytes ? qrKey : null },
       create: { id: `00000000-0000-4000-8000-${id.replaceAll("-", "").slice(0, 12)}`, replacementOrderId: id, type: "inbound", status: "label_ready", provider: "local-shipping", providerShipmentId: label.providerShipmentId, trackingNumber: label.trackingNumber, labelObjectKey: labelKey, qrCodeObjectKey: label.qrCodeBytes ? qrKey : null },
     }),
-    prisma.conversationMessage.create({ data: { replacementOrderId: id, senderKind: "system", body: `Your request is verified. Return tracking: ${label.trackingNumber}. Factory-reset the device, keep the SIM, and pack it safely.` } }),
+    prisma.conversationMessage.create({ data: { replacementOrderId: id, senderKind: "system", body: `Your request is verified. Return tracking: ${label.trackingNumber}. ${config.returnInstructions}` } }),
     prisma.workItem.updateMany({
       where: { replacementOrderId: id, kind: "claim_verification", status: { not: "completed" } },
       data: { status: "completed", lastActivityAt: new Date(), snoozedUntil: null },

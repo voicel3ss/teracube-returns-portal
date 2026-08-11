@@ -14,6 +14,7 @@ export const permissions = [
   "queue:claim",
   "queue:assign",
   "config:manage",
+  "oversight:view",
 ] as const;
 export type Permission = (typeof permissions)[number];
 
@@ -26,6 +27,7 @@ const teamPermissions: Record<StaffTeam, readonly Permission[]> = {
     "order:refund",
     "queue:claim",
     "queue:assign",
+    "oversight:view",
   ],
   repair: ["repair:record", "repair:batch_ready", "shipment:receive", "queue:claim"],
   logistics: ["shipment:receive", "shipment:dispatch", "shipment:upload_transfer_label", "queue:claim"],

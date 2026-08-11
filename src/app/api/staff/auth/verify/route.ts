@@ -39,9 +39,13 @@ export async function POST(request: Request) {
     expires: session.expiresAt,
   });
   const teams = new Set(staff.memberships.map((membership) => membership.team));
-  const destination = teams.has("support") || teams.has("ops_lead") || teams.has("admin")
-    ? "/staff/support"
-    : teams.has("repair")
+  const destination = teams.has("admin")
+    ? "/staff/admin"
+    : teams.has("ops_lead")
+      ? "/staff/oversight"
+      : teams.has("support")
+        ? "/staff/support"
+        : teams.has("repair")
       ? "/staff/repair"
       : teams.has("logistics")
         ? "/staff/logistics"

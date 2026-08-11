@@ -29,4 +29,9 @@ describe("support deposit refunds", () => {
     expect(result.refundableInCents).toBe(6000);
     expect(result.error).toContain("remaining captured deposit");
   });
+
+  it("can require physical receipt before a deposit refund", () => {
+    const result = validateDepositRefund({ status: "return_in_transit", amountInCents: 1000, depositInCents: 8000, alreadyRefundedInCents: 0, amountPaidInCents: 8000, refundGate: "return_received" });
+    expect(result.error).toContain("must be received");
+  });
 });

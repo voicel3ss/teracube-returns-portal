@@ -539,3 +539,18 @@ model AutomationMarker {
   @@unique([replacementOrderId, kind])
   @@map("automation_markers")
 }
+
+model AppConfig {
+  id                         String   @id @default("default")
+  approvalMode               String   @default("auto") @map("approval_mode")
+  depositRefundGate          String   @default("return_in_transit") @map("deposit_refund_gate")
+  returnReminderDays         Int      @default(4) @map("return_reminder_days")
+  returnEscalationDays       Int      @default(6) @map("return_escalation_days")
+  staleClaimDays             Int      @default(3) @map("stale_claim_days")
+  unidentifiedEscalationDays Int      @default(2) @map("unidentified_escalation_days")
+  stuckRepairDays            Int      @default(3) @map("stuck_repair_days")
+  returnInstructions         String   @default("Factory-reset the device, keep your SIM card, and pack it safely.") @map("return_instructions")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+
+  @@map("app_config")
+}
