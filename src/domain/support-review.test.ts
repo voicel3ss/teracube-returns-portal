@@ -16,6 +16,21 @@ describe("support claim review", () => {
     expect(validateClaimReview({ configuredCoverage: "accident", confirmedCoverage: "accident", feeInCents: 4900 }))
       .toBeNull();
   });
+
+  it("blocks free accidental damage without an approved exception", () => {
+    expect(validateClaimReview({ configuredCoverage: "accident", confirmedCoverage: "accident", feeInCents: 0, freeOutcomeReason: "Looks okay" }))
+      .toContain("protection plan");
+  });
+
+  it("accepts free accidental damage covered by a protection plan", () => {
+    expect(validateClaimReview({ configuredCoverage: "accident", confirmedCoverage: "accident", feeInCents: 0, freeOutcomeReason: "Accidental-damage protection plan" }))
+      .toBeNull();
+  });
+
+  it("accepts a documented courtesy exception", () => {
+    expect(validateClaimReview({ configuredCoverage: "accident", confirmedCoverage: "accident", feeInCents: 0, freeOutcomeReason: "Courtesy exception: One-time retention exception" }))
+      .toBeNull();
+  });
 });
 
 describe("support deposit refunds", () => {

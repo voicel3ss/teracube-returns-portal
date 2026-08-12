@@ -5,6 +5,7 @@ import { PrismaCustomerTokenRepository } from "@/db/auth-repositories";
 import { prisma } from "@/db/prisma";
 import { getCustomerTrackingView } from "@/domain/customer-tracking";
 import { CustomerConversation } from "./customer-conversation";
+import { PaymentDue } from "./payment-due";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ export default async function TrackingPage({
 
   if (!order) return null;
   const view = getCustomerTrackingView(order.status, order.processType?.flow);
+  const balanceDueInCents = order.processType ? Math.max(0, order.processType.feeInCents + order.processType.depositInCents - order.amountPaidInCents) : 0;
   const messages = order.messages.map((message) => ({ id: message.id, senderKind: message.senderKind, body: message.body, sentAt: message.createdAt.toISOString(), photos: message.attachments.map((photo) => ({ id: photo.id, name: photo.filename, dataUrl: `data:${photo.contentType};base64,${Buffer.from(photo.data).toString("base64")}` })) }));
 
   return (
@@ -58,6 +60,7 @@ export default async function TrackingPage({
           </div>
 
           <div className="border-t border-black/10 p-7 sm:p-10">
+            {balanceDueInCents > 0 ? <PaymentDue token={token} balanceInCents={balanceDueInCents} /> : null}
             <CustomerConversation token={token} messages={messages} />
 
             <ol className="grid grid-cols-4 gap-2">

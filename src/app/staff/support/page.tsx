@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { getStaffContext } from "@/auth/staff-request";
 import { hasPermission } from "@/auth/permissions";
 import { prisma } from "@/db/prisma";
-import { maskPii } from "@/security/pii";
 import { StaffShell } from "./staff-shell";
 
 export const dynamic = "force-dynamic";
@@ -61,7 +60,7 @@ export default async function SupportQueuePage({ searchParams }: { searchParams:
   const teamItems = items.filter((item) => !item.assignedToStaffId);
 
   return (
-    <StaffShell name={staff.displayName}>
+    <StaffShell name={staff.displayName} teams={staff.teams}>
       <div className="mx-auto max-w-7xl px-5 py-8 sm:px-7 sm:py-10">
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
           <div><p className="text-sm font-semibold text-[var(--green-strong)]">Support operations</p><h1 className="mt-1 text-3xl font-semibold tracking-[-0.035em]">Claims needing attention</h1></div>
@@ -78,7 +77,7 @@ export default async function SupportQueuePage({ searchParams }: { searchParams:
               {searchResults.length ? searchResults.map((order) => (
                 <Link key={order.id} href={`/staff/support/orders/${order.id}`} className="flex items-center justify-between rounded-xl border border-black/8 px-4 py-3 hover:border-black/25">
                   <span><strong>#{String(order.orderNumber).padStart(4, "0")}</strong><span className="ml-3 text-sm text-black/45">{order.returnedDevice?.model.name ?? "Unidentified device"}</span></span>
-                  <span className="text-sm text-black/45">{maskPii("parent_email", order.customer.emails[0]?.email ?? "")}</span>
+                  <span className="text-sm text-black/45">{order.customer.emails[0]?.email ?? ""}</span>
                 </Link>
               )) : <p className="text-sm text-black/45">No matching orders.</p>}
             </div>
@@ -122,7 +121,7 @@ function QueueList({ items, empty }: { items: QueueListItem[]; empty: string }) 
       <Link key={item.id} data-work-item-id={item.id} href={`/staff/support/orders/${order.id}`} className="group rounded-2xl border border-black/10 bg-white p-5 shadow-[0_10px_30px_rgba(20,30,22,0.035)] transition hover:-translate-y-0.5 hover:border-black/25">
         <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--green-strong)]">{kindLabels[item.kind]}</p><h3 className="mt-1 text-lg font-semibold">Order #{String(order.orderNumber).padStart(4, "0")}</h3></div><span className="rounded-full bg-black/[0.05] px-2.5 py-1 text-xs font-medium">{item.status}</span></div>
         <p className="mt-3 text-sm text-black/55">{order.returnedDevice?.model.name ?? "Device not identified"} · {order.returnedDeviceSerial ?? "No serial"}</p>
-        <div className="mt-4 flex items-center justify-between border-t border-black/8 pt-3 text-xs text-black/40"><span>{maskPii("parent_email", order.customer.emails[0]?.email ?? "")}</span><span>{order.processType?.name ?? "Manual review"} →</span></div>
+        <div className="mt-4 flex items-center justify-between border-t border-black/8 pt-3 text-xs text-black/40"><span>{order.customer.emails[0]?.email ?? ""}</span><span>{order.processType?.name ?? "Manual review"} →</span></div>
       </Link>
     );
   })}</div>;

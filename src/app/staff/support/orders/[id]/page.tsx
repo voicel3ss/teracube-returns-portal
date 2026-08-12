@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getAuthorizedStaff } from "@/auth/staff-request";
 import { prisma } from "@/db/prisma";
-import { maskPii } from "@/security/pii";
 import { StaffShell } from "../../staff-shell";
 import { SupportOrderActions } from "./support-order-actions";
 import { StaffConversation } from "./staff-conversation";
@@ -35,7 +34,7 @@ export default async function SupportOrderPage({ params }: PageProps<"/staff/sup
   const conversation = order.messages.map((message) => ({ id: message.id, senderKind: message.senderKind, body: message.body, sentAt: message.createdAt.toISOString(), photos: message.attachments.map((photo) => ({ id: photo.id, name: photo.filename, dataUrl: `data:${photo.contentType};base64,${Buffer.from(photo.data).toString("base64")}` })) }));
 
   return (
-    <StaffShell name={staff.displayName}>
+    <StaffShell name={staff.displayName} teams={staff.teams}>
       <div className="mx-auto max-w-7xl px-5 py-8 sm:px-7">
         <Link href="/staff/support" className="text-sm font-semibold text-black/45">← Back to queue</Link>
         <div className="mt-5 grid gap-7 lg:grid-cols-[1fr_0.62fr]">
@@ -46,7 +45,7 @@ export default async function SupportOrderPage({ params }: PageProps<"/staff/sup
                 <div className="flex gap-2"><Badge>{order.status.replaceAll("_", " ")}</Badge><Badge>{order.reviewState.replaceAll("_", " ")}</Badge></div>
               </div>
               <dl className="mt-7 grid gap-5 border-t border-black/10 pt-6 sm:grid-cols-2">
-                <Data label="Customer">{maskPii("parent_email", order.customer.emails[0]?.email ?? "No email")}</Data>
+                <Data label="Customer">{order.customer.emails[0]?.email ?? "No email"}</Data>
                 <Data label="Communication ticket">{order.communicationTicketId ?? "Not created"}</Data>
                 <Data label="Device">{order.returnedDevice?.model.name ?? "Unidentified"}</Data>
                 <Data label="Serial">{order.returnedDeviceSerial ?? "Not known"}</Data>

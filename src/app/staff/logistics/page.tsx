@@ -15,11 +15,77 @@ export default async function LogisticsPage() {
     if (hasPermission(staff.teams, "order:view_all")) redirect("/staff/support");
     redirect("/staff/login");
   }
-  const [orders, stock, transfers, recent] = await Promise.all([
+
+  const [orders, stock, transfers, expectedInbound, recent] = await Promise.all([
     prisma.replacementOrder.findMany({ where: { reviewState: "reviewed", status: { in: ["awaiting_verification", "return_in_transit", "return_received"] }, outboundDeviceSerial: null }, include: { processType: true, returnedDevice: { include: { model: true } } }, orderBy: { updatedAt: "asc" }, take: 50 }),
     prisma.device.findMany({ where: { circulationState: "in_stock", grade: "refurbished" }, include: { model: true }, orderBy: { updatedAt: "asc" }, take: 100 }),
     prisma.shipment.findMany({ where: { type: "internal_transfer", status: { in: ["created", "label_ready", "in_transit"] } }, include: { units: true }, orderBy: { createdAt: "desc" }, take: 50 }),
+    prisma.shipment.findMany({
+      where: { type: "inbound", status: { in: ["label_ready", "in_transit", "delivered", "received"] } },
+      include: { replacementOrder: { include: { returnedDevice: { include: { model: true } } } }, units: true },
+      orderBy: { updatedAt: "desc" },
+      take: 50,
+    }),
     prisma.shipment.findMany({ where: { status: { in: ["received", "in_transit", "label_ready"] } }, include: { replacementOrder: true, units: true }, orderBy: { updatedAt: "desc" }, take: 12 }),
   ]);
-  return <StaffShell name={staff.displayName} area="logistics"><div className="mx-auto max-w-7xl px-5 py-8 sm:px-7"><p className="text-sm font-semibold text-[var(--green-strong)]">Logistics operations</p><h1 className="mt-1 text-3xl font-semibold tracking-[-.035em]">Receive, reconcile, and dispatch</h1><p className="mt-2 text-black/50">Scan every physical handoff so the shipment record and serial ledger stay aligned.</p><div className="mt-7"><LogisticsWorkspace orders={orders.map((order) => ({ id: order.id, orderNumber: order.orderNumber, model: order.returnedDevice?.model.name ?? "Unidentified model", flow: order.processType?.flow ?? "regular", status: order.status }))} stock={stock.map((device) => ({ serial: device.serial, model: device.model.name }))} transfers={transfers.map((shipment) => ({ id: shipment.id, status: shipment.status, serials: shipment.units.map((unit) => unit.deviceSerial), labelFilename: shipment.labelFilename }))} /></div><section className="mt-7 rounded-[1.5rem] border border-black/10 bg-white p-6 sm:p-8"><div className="flex items-center justify-between"><h2 className="font-semibold">Recent handoffs</h2><span className="text-sm text-black/40">{recent.length} shipments</span></div><div className="mt-5 divide-y divide-black/10">{recent.map((shipment) => <div key={shipment.id} className="grid gap-2 py-4 sm:grid-cols-[.7fr_1fr_1fr_.6fr]"><p className="text-sm font-semibold capitalize">{shipment.type.replaceAll("_", " ")}</p><p className="font-mono text-xs text-black/55">{shipment.trackingNumber ?? shipment.id.slice(0, 8)}</p><p className="text-sm text-black/55">{shipment.units.length} unit{shipment.units.length === 1 ? "" : "s"}</p><p className="text-sm font-medium capitalize">{shipment.status.replaceAll("_", " ")}</p></div>)}{!recent.length ? <p className="py-8 text-center text-sm text-black/40">No shipment handoffs recorded yet.</p> : null}</div></section></div></StaffShell>;
+
+  return (
+    <StaffShell name={staff.displayName} teams={staff.teams} area="logistics">
+      <div className="mx-auto max-w-7xl px-5 py-8 sm:px-7">
+        <p className="text-sm font-semibold text-[var(--green-strong)]">Logistics operations</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-[-.035em]">Receive, reconcile, and dispatch</h1>
+        <p className="mt-2 text-black/50">Scan every physical handoff so the shipment record and serial ledger stay aligned.</p>
+
+        <ExpectedInbound shipments={expectedInbound.map((shipment) => ({
+          id: shipment.id,
+          tracking: shipment.trackingNumber,
+          status: shipment.status,
+          orderNumber: shipment.replacementOrder?.orderNumber ?? null,
+          expectedSerial: shipment.replacementOrder?.returnedDeviceSerial ?? null,
+          model: shipment.replacementOrder?.returnedDevice?.model.name ?? "Unidentified model",
+          observedSerials: shipment.units.filter((unit) => unit.observed).map((unit) => unit.deviceSerial),
+        }))} />
+
+        <div className="mt-7"><LogisticsWorkspace orders={orders.map((order) => ({ id: order.id, orderNumber: order.orderNumber, model: order.returnedDevice?.model.name ?? "Unidentified model", flow: order.processType?.flow ?? "regular", status: order.status }))} stock={stock.map((device) => ({ serial: device.serial, model: device.model.name }))} transfers={transfers.map((shipment) => ({ id: shipment.id, status: shipment.status, serials: shipment.units.map((unit) => unit.deviceSerial), labelFilename: shipment.labelFilename }))} /></div>
+
+        <section className="mt-7 rounded-[1.5rem] border border-black/10 bg-white p-6 sm:p-8">
+          <div className="flex items-center justify-between"><h2 className="font-semibold">Recent handoffs</h2><span className="text-sm text-black/40">{recent.length} shipments</span></div>
+          <div className="mt-5 divide-y divide-black/10">
+            {recent.map((shipment) => <div key={shipment.id} className="grid gap-2 py-4 sm:grid-cols-[.7fr_1fr_1fr_.6fr]"><p className="text-sm font-semibold capitalize">{shipment.type.replaceAll("_", " ")}</p><p className="font-mono text-xs text-black/55">{shipment.trackingNumber ?? shipment.id.slice(0, 8)}</p><p className="text-sm text-black/55">{shipment.units.length} unit{shipment.units.length === 1 ? "" : "s"}</p><p className="text-sm font-medium capitalize">{shipment.status.replaceAll("_", " ")}</p></div>)}
+            {!recent.length ? <p className="py-8 text-center text-sm text-black/40">No shipment handoffs recorded yet.</p> : null}
+          </div>
+        </section>
+      </div>
+    </StaffShell>
+  );
+}
+
+type ExpectedShipment = { id: string; tracking: string | null; status: string; orderNumber: number | null; expectedSerial: string | null; model: string; observedSerials: string[] };
+
+function ExpectedInbound({ shipments }: { shipments: ExpectedShipment[] }) {
+  return (
+    <section className="mt-7 rounded-[1.5rem] border border-black/10 bg-white p-6 sm:p-8">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div><h2 className="text-xl font-semibold">Expected inbound packages</h2><p className="mt-1 text-sm text-black/45">Compare each delivered package with the device serial expected on its order.</p></div>
+        <span className="text-sm font-medium text-black/45">{shipments.filter((shipment) => shipment.status !== "received").length} still expected</span>
+      </div>
+      <div className="mt-5 overflow-x-auto">
+        <div className="min-w-[760px] divide-y divide-black/10">
+          <div className="grid grid-cols-[1.1fr_.65fr_1fr_.8fr_.8fr] gap-4 pb-3 text-xs font-semibold uppercase tracking-[.08em] text-black/35"><span>Tracking</span><span>Order</span><span>Expected serial</span><span>Model</span><span>Check</span></div>
+          {shipments.map((shipment) => {
+            const observed = shipment.observedSerials[0] ?? null;
+            const match = observed && shipment.expectedSerial ? observed === shipment.expectedSerial : null;
+            return <div key={shipment.id} className="grid grid-cols-[1.1fr_.65fr_1fr_.8fr_.8fr] items-center gap-4 py-4 text-sm">
+              <div><p className="font-mono text-xs font-semibold">{shipment.tracking ?? "Tracking pending"}</p><p className="mt-1 text-xs capitalize text-black/40">{shipment.status.replaceAll("_", " ")}</p></div>
+              <span className="font-semibold">{shipment.orderNumber ? `#${String(shipment.orderNumber).padStart(4, "0")}` : "—"}</span>
+              <span className="font-mono text-xs font-semibold">{shipment.expectedSerial ?? "Not identified"}</span>
+              <span>{shipment.model}</span>
+              <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${match === true ? "bg-emerald-100 text-emerald-800" : match === false ? "bg-red-100 text-red-800" : "bg-black/[.055] text-black/50"}`}>{match === true ? "Serial matched" : match === false ? `Mismatch: ${observed}` : shipment.status === "received" ? "No serial scanned" : "Awaiting scan"}</span>
+            </div>;
+          })}
+          {!shipments.length ? <p className="py-10 text-center text-sm text-black/40">No inbound packages are currently expected.</p> : null}
+        </div>
+      </div>
+    </section>
+  );
 }

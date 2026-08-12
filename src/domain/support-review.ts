@@ -8,7 +8,15 @@ export function validateClaimReview(input: {
     return "The confirmed coverage changes the price. Request clarification before changing the process.";
   }
   if (input.feeInCents === 0 && !input.freeOutcomeReason?.trim()) {
-    return "An internal reason is required for every free warranty outcome.";
+    return "An internal reason is required for every free outcome.";
+  }
+  if (input.confirmedCoverage === "accident" && input.feeInCents === 0) {
+    const reason = input.freeOutcomeReason?.trim() ?? "";
+    const hasProtectionPlan = reason === "Accidental-damage protection plan";
+    const hasCourtesyException = reason.startsWith("Courtesy exception: ") && reason.slice("Courtesy exception: ".length).trim().length >= 3;
+    if (!hasProtectionPlan && !hasCourtesyException) {
+      return "Free accidental-damage claims require a protection plan or a documented courtesy exception.";
+    }
   }
   return null;
 }

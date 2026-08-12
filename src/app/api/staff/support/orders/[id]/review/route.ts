@@ -11,6 +11,7 @@ const schema = z.discriminatedUnion("action", [
     confirmedCoverage: z.enum(["warranty", "accident"]),
     freeOutcomeReason: z.string().trim().max(1000).optional(),
   }),
+  z.object({ action: z.literal("reprice"), csVerifiedFault: z.string().trim().min(3).max(1000) }),
   z.object({ action: z.literal("clarify"), message: z.string().trim().min(5).max(2000) }),
 ]);
 
@@ -20,7 +21,7 @@ export async function POST(request: Request, { params }: RouteContext<"/api/staf
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid review." }, { status: 400 });
   const { id } = await params;
-  const order = await prisma.replacementOrder.findUnique({ where: { id }, include: { processType: true } });
+  const order = await prisma.replacementOrder.findUnique({ where: { id }, include: { processType: true, returnedDevice: true } });
   if (!order) return Response.json({ error: "Order not found." }, { status: 404 });
 
   if (parsed.data.action === "clarify") {
@@ -49,6 +50,29 @@ export async function POST(request: Request, { params }: RouteContext<"/api/staf
       }),
     ]);
     return Response.json({ ok: true, reviewState: "needs_clarification" });
+  }
+
+  if (parsed.data.action === "reprice") {
+    if (!order.processType) return Response.json({ error: "Identify the replacement process before applying a fee." }, { status: 409 });
+    const paidProcess = await prisma.processType.findFirst({
+      where: {
+        slug: `accident-${order.processType.flow}`,
+        active: true,
+        ...(order.returnedDevice ? { modelMappings: { some: { modelId: order.returnedDevice.modelId } } } : {}),
+      },
+    });
+    if (!paidProcess || paidProcess.feeInCents <= 0) return Response.json({ error: "No paid accidental-damage option is configured for this device and replacement path." }, { status: 409 });
+    const totalDue = paidProcess.feeInCents + paidProcess.depositInCents;
+    const balanceDue = Math.max(0, totalDue - order.amountPaidInCents);
+    if (balanceDue === 0) return Response.json({ error: "This order is already fully paid. Refresh the page and verify it." }, { status: 409 });
+    const customerMessage = `Support confirmed accidental damage. A payment of $${(balanceDue / 100).toFixed(2)} is required before we can release the return label or replacement.`;
+    await prisma.$transaction([
+      prisma.replacementOrder.update({ where: { id }, data: { processTypeId: paidProcess.id, csVerifiedFault: parsed.data.csVerifiedFault, reviewState: "needs_clarification", status: "submitted", freeOutcomeReason: null } }),
+      prisma.conversationMessage.create({ data: { replacementOrderId: id, senderKind: "system", body: customerMessage } }),
+      prisma.workItem.updateMany({ where: { replacementOrderId: id, kind: "claim_verification", status: { not: "completed" } }, data: { lastActivityAt: new Date(), snoozedUntil: null } }),
+      prisma.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "replacement_order.repriced_for_accidental_damage", entityType: "replacement_order", entityId: id, metadata: { previousProcessTypeId: order.processType.id, processTypeId: paidProcess.id, balanceDueInCents: balanceDue } } }),
+    ]);
+    return Response.json({ ok: true, reviewState: "needs_clarification", balanceDueInCents: balanceDue });
   }
 
   if (!order.processType) return Response.json({ error: "Identify the device and replacement process before verification." }, { status: 409 });

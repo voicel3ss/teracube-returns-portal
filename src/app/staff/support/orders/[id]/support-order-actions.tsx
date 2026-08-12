@@ -20,6 +20,7 @@ export function SupportOrderActions({ orderId, workItem, staffId, reviewState, i
   const [fault, setFault] = useState(initialFault);
   const [confirmedCoverage, setConfirmedCoverage] = useState(coverage);
   const [freeReason, setFreeReason] = useState("");
+  const [accidentalFreeBasis, setAccidentalFreeBasis] = useState<"" | "paid" | "plan" | "courtesy">("");
   const [pauseNote, setPauseNote] = useState("");
   const [note, setNote] = useState("");
   const [refundDollars, setRefundDollars] = useState((refundableDepositInCents / 100).toFixed(2));
@@ -27,6 +28,17 @@ export function SupportOrderActions({ orderId, workItem, staffId, reviewState, i
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mine = workItem?.assignedToStaffId === staffId;
+  const accidentalFreeOutcome = requiresFreeReason && confirmedCoverage === "accident";
+  const submittedFreeReason = accidentalFreeOutcome
+    ? accidentalFreeBasis === "plan"
+      ? "Accidental-damage protection plan"
+      : accidentalFreeBasis === "courtesy"
+        ? `Courtesy exception: ${freeReason.trim()}`
+        : ""
+    : freeReason.trim();
+  const freeReasonComplete = !requiresFreeReason || (accidentalFreeOutcome
+    ? accidentalFreeBasis === "paid" || accidentalFreeBasis === "plan" || (accidentalFreeBasis === "courtesy" && freeReason.trim().length >= 3)
+    : freeReason.trim().length >= 3);
 
   async function mutate(url: string, method: string, body: object) {
     setBusy(true); setError(null);
@@ -71,8 +83,21 @@ export function SupportOrderActions({ orderId, workItem, staffId, reviewState, i
         <select value={confirmedCoverage} onChange={(event) => setConfirmedCoverage(event.target.value as "warranty" | "accident")} className="mt-2 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm">
           <option value="warranty">Warranty</option><option value="accident">Accidental damage</option>
         </select>
-        {requiresFreeReason ? <><label className="mt-4 block text-sm font-semibold">Internal reason for free outcome</label><textarea value={freeReason} onChange={(event) => setFreeReason(event.target.value)} rows={3} placeholder="Required for every $0 warranty fee" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm" /></> : null}
-        <button onClick={() => mutate(`/api/staff/support/orders/${orderId}/review`, "POST", { action: "verify", csVerifiedFault: fault, confirmedCoverage, freeOutcomeReason: freeReason })} disabled={busy || !mine || fault.trim().length < 3 || (requiresFreeReason && freeReason.trim().length < 3)} className="mt-5 h-11 w-full rounded-xl bg-[var(--green-strong)] text-sm font-semibold text-white disabled:opacity-35">Verify and release gate</button>
+        {accidentalFreeOutcome ? <>
+          <label className="mt-4 block text-sm font-semibold">How should accidental damage be handled?</label>
+          <select value={accidentalFreeBasis} onChange={(event) => { setAccidentalFreeBasis(event.target.value as "" | "paid" | "plan" | "courtesy"); setFreeReason(""); }} className="mt-2 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm">
+            <option value="">Select an outcome</option>
+            <option value="paid">Apply the accidental-damage fee</option>
+            <option value="plan">Covered by accidental-damage protection plan</option>
+            <option value="courtesy">Courtesy exception</option>
+          </select>
+          {accidentalFreeBasis === "courtesy" ? <><label className="mt-4 block text-sm font-semibold">Internal courtesy-exception reason</label><textarea value={freeReason} onChange={(event) => setFreeReason(event.target.value)} rows={3} placeholder="Explain why this one-time exception was approved" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm" /></> : null}
+        </> : requiresFreeReason ? <><label className="mt-4 block text-sm font-semibold">Internal reason for free warranty outcome</label><textarea value={freeReason} onChange={(event) => setFreeReason(event.target.value)} rows={3} placeholder="Explain why this claim is covered at no charge" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm" /></> : null}
+        <button onClick={() => accidentalFreeOutcome && accidentalFreeBasis === "paid"
+          ? mutate(`/api/staff/support/orders/${orderId}/review`, "POST", { action: "reprice", csVerifiedFault: fault })
+          : mutate(`/api/staff/support/orders/${orderId}/review`, "POST", { action: "verify", csVerifiedFault: fault, confirmedCoverage, freeOutcomeReason: submittedFreeReason })}
+          disabled={busy || !mine || fault.trim().length < 3 || !freeReasonComplete}
+          className="mt-5 h-11 w-full rounded-xl bg-[var(--green-strong)] text-sm font-semibold text-white disabled:opacity-35">{accidentalFreeOutcome && accidentalFreeBasis === "paid" ? "Apply fee and request payment" : "Verify and release gate"}</button>
         {!mine ? <p className="mt-2 text-center text-xs text-black/40">Claim the item before verifying it.</p> : null}
       </section>}
 
