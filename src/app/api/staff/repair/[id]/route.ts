@@ -9,7 +9,7 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("terminal"), disposition: z.enum(["scrap", "parts_harvest", "beyond_economic_repair"]), reason: z.string().trim().min(3).max(2000) }),
 ]);
 
-export async function PATCH(request: Request, { params }: RouteContext<"/api/staff/repair/[id]">) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const staff = await getAuthorizedStaff("repair:record");
   if (!staff) return Response.json({ error: "Repair authorization required." }, { status: 401 });
   const parsed = schema.safeParse(await request.json());

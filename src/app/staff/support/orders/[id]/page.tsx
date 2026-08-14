@@ -8,7 +8,7 @@ import { StaffConversation } from "./staff-conversation";
 
 export const dynamic = "force-dynamic";
 
-export default async function SupportOrderPage({ params }: PageProps<"/staff/support/orders/[id]">) {
+export default async function SupportOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const staff = await getAuthorizedStaff("order:view_all");
   if (!staff) redirect("/staff/login");
   const { id } = await params;

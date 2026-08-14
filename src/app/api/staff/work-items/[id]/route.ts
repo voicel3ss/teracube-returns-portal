@@ -8,7 +8,7 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("snooze"), days: z.union([z.literal(1), z.literal(3), z.literal(7)]), note: z.string().trim().min(2).max(500) }),
 ]);
 
-export async function PATCH(request: Request, { params }: RouteContext<"/api/staff/work-items/[id]">) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const staff = await getAuthorizedStaff("queue:claim");
   if (!staff) return Response.json({ error: "Staff authorization required." }, { status: 401 });
   const parsed = schema.safeParse(await request.json());

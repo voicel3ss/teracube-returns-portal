@@ -15,7 +15,7 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("clarify"), message: z.string().trim().min(5).max(2000) }),
 ]);
 
-export async function POST(request: Request, { params }: RouteContext<"/api/staff/support/orders/[id]/review">) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const staff = await getAuthorizedStaff("order:verify");
   if (!staff) return Response.json({ error: "Support authorization required." }, { status: 401 });
   const parsed = schema.safeParse(await request.json());
