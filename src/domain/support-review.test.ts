@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { validateClaimReview, validateDepositRefund } from "./support-review";
 
 describe("support claim review", () => {
-  it("blocks a coverage change that would bypass repricing", () => {
-    expect(validateClaimReview({ configuredCoverage: "warranty", confirmedCoverage: "accident", feeInCents: 0 }))
-      .toContain("changes the price");
+  it("blocks a coverage change without repricing or an approved free exception", () => {
+    expect(validateClaimReview({ configuredCoverage: "accident", confirmedCoverage: "warranty", feeInCents: 4900 }))
+      .toContain("correct paid process");
   });
 
   it("requires a reason for a free outcome", () => {
@@ -23,12 +23,12 @@ describe("support claim review", () => {
   });
 
   it("accepts free accidental damage covered by a protection plan", () => {
-    expect(validateClaimReview({ configuredCoverage: "accident", confirmedCoverage: "accident", feeInCents: 0, freeOutcomeReason: "Accidental-damage protection plan" }))
+    expect(validateClaimReview({ configuredCoverage: "warranty", confirmedCoverage: "accident", feeInCents: 0, freeOutcomeReason: "Accidental-damage protection plan" }))
       .toBeNull();
   });
 
   it("accepts a documented courtesy exception", () => {
-    expect(validateClaimReview({ configuredCoverage: "accident", confirmedCoverage: "accident", feeInCents: 0, freeOutcomeReason: "Courtesy exception: One-time retention exception" }))
+    expect(validateClaimReview({ configuredCoverage: "warranty", confirmedCoverage: "accident", feeInCents: 0, freeOutcomeReason: "Courtesy exception: One-time retention exception" }))
       .toBeNull();
   });
 });

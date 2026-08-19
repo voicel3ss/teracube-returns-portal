@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getAuthorizedStaff } from "@/auth/staff-request";
+import { hasPermission } from "@/auth/permissions";
 import { prisma } from "@/db/prisma";
+import { maskPii } from "@/security/pii";
 import { StaffShell } from "../../staff-shell";
 import { SupportOrderActions } from "./support-order-actions";
 import { StaffConversation } from "./staff-conversation";
@@ -30,6 +32,8 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
     take: 30,
   });
   const activeItem = order.workItems[0] ?? null;
+  const canAssign = hasPermission(staff.teams, "queue:assign");
+  const assignableStaff = canAssign ? await prisma.staffUser.findMany({ where: { active: true, memberships: { some: { team: { in: ["support", "ops_lead", "admin"] } } } }, select: { id: true, displayName: true }, orderBy: { displayName: "asc" } }) : [];
   const coverage = order.processType?.slug.startsWith("warranty-") ? "warranty" : "accident";
   const conversation = order.messages.map((message) => ({ id: message.id, senderKind: message.senderKind, body: message.body, sentAt: message.createdAt.toISOString(), photos: message.attachments.map((photo) => ({ id: photo.id, name: photo.filename, dataUrl: `data:${photo.contentType};base64,${Buffer.from(photo.data).toString("base64")}` })) }));
 
@@ -45,7 +49,7 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
                 <div className="flex gap-2"><Badge>{order.status.replaceAll("_", " ")}</Badge><Badge>{order.reviewState.replaceAll("_", " ")}</Badge></div>
               </div>
               <dl className="mt-7 grid gap-5 border-t border-black/10 pt-6 sm:grid-cols-2">
-                <Data label="Customer">{order.customer.emails[0]?.email ?? "No email"}</Data>
+                <Data label="Customer">{order.customer.emails[0] ? maskPii("parent_email", order.customer.emails[0].email) : "No email"}</Data>
                 <Data label="Communication ticket">{order.communicationTicketId ?? "Not created"}</Data>
                 <Data label="Device">{order.returnedDevice?.model.name ?? "Unidentified"}</Data>
                 <Data label="Serial">{order.returnedDeviceSerial ?? "Not known"}</Data>
@@ -70,7 +74,7 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
               </ol>
             </section>
 
-            <StaffConversation orderId={order.id} messages={conversation} canReply={activeItem?.assignedToStaffId === staff.id} />
+            <StaffConversation orderId={order.id} messages={conversation} canReply />
           </div>
 
           <aside>
@@ -78,6 +82,8 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
               orderId={order.id}
               workItem={activeItem ? { id: activeItem.id, status: activeItem.status, assignedToStaffId: activeItem.assignedToStaffId, assignedToName: activeItem.assignedToStaff?.displayName ?? null } : null}
               staffId={staff.id}
+              canAssign={canAssign}
+              assignableStaff={assignableStaff}
               reviewState={order.reviewState}
               initialFault={order.customerFaultText ?? ""}
               coverage={coverage}

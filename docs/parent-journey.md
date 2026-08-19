@@ -3,8 +3,8 @@
 ## Entry paths
 
 - Public self-service: `/repair/start`
-- Parent-app local deep link: `/repair/start?entry=parent-app-preview`
-- CS-generated pre-authenticated links use the same intake and customer-token foundation; the CS creation surface is implemented in Major Step 4.
+- Parent-app deep link: a short-lived server-signed `entry` token containing the parent email and device serial
+- Staff-created secure intake link: generated from the Support queue and valid for seven days
 
 ## Local mock records
 
@@ -13,6 +13,8 @@
 | Teracube 2e | `202112T2E235968` | `(206) 555-0142` |
 | Teracube 2s | `202503T2S118842` | `(206) 555-0177` |
 | Teracube 4 | `202401TC4009317` | `(206) 555-0199` |
+| Teracube 4 | `202402TC4009418` | `(206) 555-0164` |
+| Teracube 2e | `202403T2E236105` | `(206) 555-0185` |
 
 Any unrecognized serial or phone follows the unidentified-device support path.
 
@@ -22,7 +24,7 @@ The sample device records intentionally do not prefill a reserved `example.com` 
 
 - Email syntax is checked first, but syntax alone is never treated as proof. A six-digit, single-use code verifies access to the inbox, and the resulting server-signed assertion is bound to that exact normalized email for 30 minutes.
 - Reserved documentation domains such as `example.com` and `.invalid` are rejected.
-- The local email delivery mock displays the code in the form. A production email adapter must send it privately and must never return it to the browser.
+- Local development displays the code in the form when Postmark is not configured. When Postmark credentials are present, the code is delivered privately; production never returns it to the browser.
 - The local address mock recognizes and standardizes Teracube's public contact address: `16625 Redmond Way, Ste M-175, Redmond, WA 98052`.
 - The production address adapter will replace the mock with a deliverability validator. An order is rejected if its address differs from the server-validated, signed value.
 
@@ -35,9 +37,9 @@ The sample device records intentionally do not prefill a reserved `example.com` 
 5. Show only process types configured for the model. Pricing appears only after the parent selects advance or regular.
 6. Repeat the explicit promise that the customer receives a different refurbished unit.
 7. Verify the contact inbox, validate and standardize the shipping address, then run a mock Shopify checkout. No card data is requested. The validated address is encrypted before PostgreSQL persistence.
-8. Create a mock Freshdesk communication ticket and an order-scoped 30-day tracking token.
+8. Create an order-scoped 30-day tracking token and secure on-site conversation. A configured helpdesk adapter may mirror the order for internal records, but email is not required for parent replies.
 9. Hold the order at `awaiting_verification` until the CS milestone releases it.
-10. Show plain-language tracking for the return and replacement as separate physical legs.
+10. Show plain-language tracking for the return and replacement as separate physical legs, provide the printable return label, and update the conversation automatically while the page is open.
 
 ## Mock pricing
 

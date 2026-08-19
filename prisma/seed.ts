@@ -1,8 +1,6 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { hashToken } from "../src/auth/secure-token";
-import { PiiCipher } from "../src/security/pii-cipher";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -137,88 +135,22 @@ async function main() {
   await prisma.teamMembership.upsert({ where: { staffUserId_team: { staffUserId: opsLead.id, team: "ops_lead" } }, update: {}, create: { staffUserId: opsLead.id, team: "ops_lead" } });
   await prisma.appConfig.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } });
 
-  const existingTestOrder = await prisma.replacementOrder.findUnique({
-    where: { id: "10000000-0000-4000-8000-000000000001" },
-  });
-  if (!existingTestOrder) {
-    const processBySlug = new Map((await prisma.processType.findMany()).map((process) => [process.slug, process]));
-    const modelByCode = new Map(models.map((model) => [model.code, model]));
-    const encryptionKey = process.env.PII_ENCRYPTION_KEY;
-    if (!encryptionKey) throw new Error("PII_ENCRYPTION_KEY is required to seed test scenarios.");
-    const cipher = new PiiCipher(encryptionKey);
-    const testCases = [
-      {
-        number: 1, serial: "202112T2E235968", model: "T2E", email: "screen.parent@example.com",
-        faultCategory: "screen" as const, fault: "The screen has separated from the frame and flickers when touched.",
-        process: "warranty-advance", status: "awaiting_verification" as const, reviewState: "unreviewed" as const,
-        workKind: "claim_verification" as const, token: "test-screen-request",
-      },
-      {
-        number: 2, serial: "202503T2S118842", model: "T2S", email: "water.parent@example.com",
-        faultCategory: "water_damage" as const, fault: "The phone was splashed and now restarts every few minutes.",
-        process: "accident-regular", status: "awaiting_verification" as const, reviewState: "needs_clarification" as const,
-        workKind: "needs_clarification" as const, token: "test-water-clarification",
-      },
-      {
-        number: 3, serial: "202401TC4009317", model: "TC4", email: "camera.parent@example.com",
-        faultCategory: "camera" as const, fault: "The rear camera opens to a black screen and will not focus.",
-        process: "warranty-regular", status: "fulfillment_blocked" as const, reviewState: "reviewed" as const,
-        workKind: "fulfillment_blocked" as const, token: "test-camera-delay",
-      },
-      {
-        number: 4, serial: "202402TC4009418", model: "TC4", email: "battery.parent@example.com",
-        faultCategory: "battery" as const, fault: "The battery drains from full to empty in under two hours.",
-        process: "warranty-advance", status: "return_discrepancy" as const, reviewState: "reviewed" as const,
-        workKind: "return_discrepancy" as const, token: "test-battery-discrepancy",
-      },
-      {
-        number: 5, serial: "202403T2E236105", model: "T2E", email: "buttons.parent@example.com",
-        faultCategory: "buttons" as const, fault: "The power button is stuck and the volume-down button does not respond.",
-        process: "accident-regular", status: "return_received" as const, reviewState: "reviewed" as const,
-        workKind: null, token: "test-buttons-repair",
-      },
-    ];
-
-    for (const test of testCases) {
-      const model = modelByCode.get(test.model)!;
-      const process = processBySlug.get(test.process)!;
-      const customerId = `20000000-0000-4000-8000-${String(test.number).padStart(12, "0")}`;
-      const orderId = `10000000-0000-4000-8000-${String(test.number).padStart(12, "0")}`;
-      const customer = await prisma.customer.create({ data: { id: customerId, emails: { create: { email: test.email, normalized: test.email, isPrimary: true } } } });
-      await prisma.device.create({ data: { serial: test.serial, modelId: model.id, currentOwnerId: customer.id, grade: "new", circulationState: test.number === 5 ? "in_repair" : "deployed" } });
-      const submittedAt = new Date(Date.now() - test.number * 24 * 60 * 60 * 1000);
-      const order = await prisma.replacementOrder.create({ data: {
-        id: orderId, customerId: customer.id, processTypeId: process.id, returnedDeviceSerial: test.serial,
-        status: test.status, reviewState: test.reviewState, approvalState: "auto_approved",
-        customerFaultCategory: test.faultCategory, customerFaultText: test.fault,
-        csVerifiedFault: test.reviewState === "reviewed" ? test.fault : null,
-        freeOutcomeReason: process.feeInCents === 0 && test.reviewState === "reviewed" ? "Covered hardware failure" : null,
-        communicationTicketId: `local-ticket-${test.number}`, paymentReference: `local-payment-${test.number}`,
-        paymentLastFour: test.number % 2 ? "4242" : null, amountPaidInCents: process.feeInCents + process.depositInCents,
-        encryptedShippingAddress: cipher.encrypt(JSON.stringify({ name: `Test Parent ${test.number}`, line1: `${100 + test.number} Pine Street`, city: "Seattle", region: "WA", postalCode: `9810${test.number}`, country: "US" })),
-        submittedAt,
-        messages: { create: [
-          { senderKind: "customer", body: test.fault },
-          ...(test.number === 2 ? [{ senderKind: "staff", body: "Please confirm whether the phone was submerged or only splashed." }] : []),
-          ...(test.number === 3 ? [{ senderKind: "system", body: "The correct refurbished model is temporarily unavailable. Support is sourcing one." }] : []),
-        ] },
-        ...(test.workKind ? { workItems: { create: { team: "support", kind: test.workKind, status: "open", lastActivityAt: submittedAt } } } : {}),
-      } });
-      await prisma.customerAccessToken.create({ data: { customerId: customer.id, replacementOrderId: order.id, tokenHash: hashToken(test.token), expiresAt: new Date("2030-01-01T00:00:00Z") } });
-      await prisma.auditEvent.create({ data: { actorKind: "system", action: "test_scenario.seeded", entityType: "replacement_order", entityId: order.id, occurredAt: submittedAt, metadata: { scenario: test.workKind ?? "repair_in_progress", serial: test.serial } } });
-
-      if (test.number === 4) {
-        await prisma.shipment.create({ data: { replacementOrderId: order.id, type: "inbound", status: "received", carrier: "USPS", trackingNumber: "9400000000000000000004", provider: "local-shipping", providerShipmentId: "local-inbound-4", receivedAt: new Date(), contentsPresent: false, contentsNotes: "Package arrived without a phone." } });
-      }
-      if (test.number === 5) {
-        await prisma.shipment.create({ data: { replacementOrderId: order.id, type: "inbound", status: "received", carrier: "UPS", trackingNumber: "1Z999AA10123456785", provider: "local-shipping", providerShipmentId: "local-inbound-5", receivedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000), contentsPresent: true, contentsNotes: "Phone received; power button visibly jammed.", units: { create: { deviceSerial: test.serial, observed: true } } } });
-        await prisma.repair.create({ data: { deviceSerial: test.serial, status: "in_repair", receivedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000), detailedNotes: "Awaiting button assembly diagnosis." } });
-      }
-    }
-
-    for (const [serial, modelCode] of [["202405T2E236210", "T2E"], ["202406TC4009521", "TC4"]] as const) {
-      await prisma.device.create({ data: { serial, modelId: modelByCode.get(modelCode)!.id, grade: "refurbished", circulationState: "in_stock" } });
-    }
+  const modelByCode = new Map(models.map((model) => [model.code, model]));
+  const sampleDevices = [
+    { serial: "202112T2E235968", modelCode: "T2E", grade: "new" as const, circulationState: "deployed" as const },
+    { serial: "202503T2S118842", modelCode: "T2S", grade: "new" as const, circulationState: "deployed" as const },
+    { serial: "202401TC4009317", modelCode: "TC4", grade: "new" as const, circulationState: "deployed" as const },
+    { serial: "202402TC4009418", modelCode: "TC4", grade: "new" as const, circulationState: "deployed" as const },
+    { serial: "202403T2E236105", modelCode: "T2E", grade: "new" as const, circulationState: "deployed" as const },
+    { serial: "202405T2E236210", modelCode: "T2E", grade: "refurbished" as const, circulationState: "in_stock" as const },
+    { serial: "202406TC4009521", modelCode: "TC4", grade: "refurbished" as const, circulationState: "in_stock" as const },
+  ];
+  for (const sample of sampleDevices) {
+    await prisma.device.upsert({
+      where: { serial: sample.serial },
+      update: { modelId: modelByCode.get(sample.modelCode)!.id, grade: sample.grade, circulationState: sample.circulationState, currentOwnerId: null },
+      create: { serial: sample.serial, modelId: modelByCode.get(sample.modelCode)!.id, grade: sample.grade, circulationState: sample.circulationState },
+    });
   }
 }
 

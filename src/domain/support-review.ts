@@ -4,9 +4,6 @@ export function validateClaimReview(input: {
   feeInCents: number;
   freeOutcomeReason?: string;
 }): string | null {
-  if (input.configuredCoverage !== input.confirmedCoverage) {
-    return "The confirmed coverage changes the price. Request clarification before changing the process.";
-  }
   if (input.feeInCents === 0 && !input.freeOutcomeReason?.trim()) {
     return "An internal reason is required for every free outcome.";
   }
@@ -17,6 +14,12 @@ export function validateClaimReview(input: {
     if (!hasProtectionPlan && !hasCourtesyException) {
       return "Free accidental-damage claims require a protection plan or a documented courtesy exception.";
     }
+  }
+  const approvedFreeAccidentException = input.configuredCoverage === "warranty"
+    && input.confirmedCoverage === "accident"
+    && input.feeInCents === 0;
+  if (input.configuredCoverage !== input.confirmedCoverage && !approvedFreeAccidentException) {
+    return "The confirmed coverage changes the price. Apply the correct paid process before verification.";
   }
   return null;
 }

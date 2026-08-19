@@ -21,3 +21,17 @@ describe("customer tracking presentation", () => {
     });
   });
 });
+
+describe("shipment-aware customer tracking", () => {
+  it("shows the actual parallel leg states instead of fallback copy", () => {
+    const view = getCustomerTrackingView("return_received", "regular", { inboundStatus: "received", outboundStatus: "in_transit" });
+    expect(view.returnStatus).toBe("Received");
+    expect(view.replacementStatus).toBe("In transit");
+  });
+
+  it("does not hide a return discrepancy behind shipment progress", () => {
+    const view = getCustomerTrackingView("return_discrepancy", "advance", { inboundStatus: "received", outboundStatus: "in_transit" });
+    expect(view.returnStatus).toBe("Needs review");
+    expect(view.tone).toBe("attention");
+  });
+});

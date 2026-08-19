@@ -42,7 +42,11 @@ export async function POST(request: Request) {
   await prisma.$transaction([
     prisma.conversationMessage.create({ data: { replacementOrderId: access.replacementOrderId, senderKind: "customer", body: parsed.data.message, attachments: { create: attachments } } }),
     prisma.replacementOrder.update({ where: { id: access.replacementOrderId }, data: { reviewState: "unreviewed" } }),
-    prisma.workItem.updateMany({ where: { replacementOrderId: access.replacementOrderId, status: { not: "completed" } }, data: { status: "open", snoozedUntil: null, lastActivityAt: new Date() } }),
+    prisma.workItem.upsert({
+      where: { replacementOrderId_kind: { replacementOrderId: access.replacementOrderId, kind: "needs_clarification" } },
+      update: { status: "open", assignedToStaffId: null, snoozedUntil: null, lastActivityAt: new Date() },
+      create: { replacementOrderId: access.replacementOrderId, team: "support", kind: "needs_clarification", status: "open" },
+    }),
     prisma.auditEvent.create({ data: { actorKind: "customer", action: "replacement_order.customer_replied", entityType: "replacement_order", entityId: access.replacementOrderId, metadata: { attachments: attachments.length } } }),
   ]);
   return Response.json({ ok: true });

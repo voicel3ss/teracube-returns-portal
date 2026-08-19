@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { CustomerTokenService } from "@/auth/customer-token";
+import { verifyCustomerEntry } from "@/auth/customer-entry";
 import { PrismaCustomerTokenRepository } from "@/db/auth-repositories";
 import { prisma } from "@/db/prisma";
 import { parseTeracubeSerial } from "@/domain/serial-number";
 import { mockIdentityProvider, mockPlanProvider } from "@/integrations/mocks/device-care";
 import { consolidateCustomerForDevice } from "@/server/customers";
-import { normalizeEmail, verifyVerificationAssertion } from "@/verification/assertion";
+import { issueVerificationAssertion, normalizeEmail, verifyVerificationAssertion } from "@/verification/assertion";
 import { customerEmailSchema } from "@/verification/schemas";
 
 const identifySchema = z
@@ -30,8 +31,9 @@ export async function POST(request: Request) {
   let trustedParentEmail: string | undefined;
 
   if (parsed.data.parentAppEntry) {
-    const appEntry = await mockIdentityProvider.resolveParentAppEntry(parsed.data.parentAppEntry);
-    if (!appEntry) return Response.json({ error: "This Parent app link is invalid or expired." }, { status: 401 });
+    const secret = process.env.AUTH_TOKEN_SECRET;
+    const appEntry = secret ? verifyCustomerEntry(parsed.data.parentAppEntry, secret) : null;
+    if (!appEntry) return Response.json({ error: "This secure customer link is invalid or expired." }, { status: 401 });
     lookup = { serial: appEntry.serial };
     trustedParentEmail = appEntry.parentEmail;
   }
@@ -46,19 +48,23 @@ export async function POST(request: Request) {
   const model = models.find((candidate) => candidate.id === serial.value.modelId)!;
   const plan = await mockPlanProvider.getPlanByIccid(identity.iccid);
 
+  let verifiedParentEmail = trustedParentEmail ? normalizeEmail(trustedParentEmail) : undefined;
   if (parsed.data.parentEmail && parsed.data.emailVerificationToken) {
     const secret = process.env.AUTH_TOKEN_SECRET;
     const normalizedEmail = normalizeEmail(parsed.data.parentEmail);
     if (!secret || !verifyVerificationAssertion(parsed.data.emailVerificationToken, "customer_email", normalizedEmail, secret)) {
       return Response.json({ error: "Verify this email address again before checking the request." }, { status: 403 });
     }
+    verifiedParentEmail = normalizedEmail;
+  }
+  if (verifiedParentEmail) {
     const activeOrder = await prisma.replacementOrder.findFirst({
       where: { returnedDeviceSerial: serial.value.serial, status: { not: "closed" } },
       orderBy: { createdAt: "desc" },
     });
     if (activeOrder) {
       const customer = await prisma.$transaction((transaction) =>
-        consolidateCustomerForDevice(transaction, { email: normalizedEmail, serial: serial.value.serial }),
+        consolidateCustomerForDevice(transaction, { email: verifiedParentEmail, serial: serial.value.serial }),
       );
       const access = await new CustomerTokenService(new PrismaCustomerTokenRepository(prisma)).issue({
         customerId: customer.id,
@@ -72,6 +78,7 @@ export async function POST(request: Request) {
     }
   }
 
+  const secret = process.env.AUTH_TOKEN_SECRET;
   return Response.json({
     status: "identified",
     device: {
@@ -84,5 +91,6 @@ export async function POST(request: Request) {
     },
     plan: plan ? { status: plan.status } : null,
     parentEmail: trustedParentEmail,
+    emailVerificationToken: trustedParentEmail && secret ? issueVerificationAssertion("customer_email", normalizeEmail(trustedParentEmail), secret) : undefined,
   });
 }

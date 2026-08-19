@@ -9,9 +9,9 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return Response.json({ error: "Enter at least one serial." }, { status: 400 });
   const serials = [...new Set(parsed.data.serials.map((value) => value.toUpperCase()))];
-  const repairs = await prisma.repair.findMany({ where: { deviceSerial: { in: serials }, status: { in: ["in_repair", "qc_pass"] }, repairTeamResolution: { not: null } }, orderBy: { createdAt: "desc" } });
+  const repairs = await prisma.repair.findMany({ where: { deviceSerial: { in: serials }, status: "qc_pass", repairTeamResolution: { not: null } }, orderBy: { createdAt: "desc" } });
   const eligible = [...new Map(repairs.map((repair) => [repair.deviceSerial, repair])).values()];
-  if (eligible.length !== serials.length) return Response.json({ error: "Every serial needs an active repair with a recorded resolution before batch QC." }, { status: 409 });
+  if (eligible.length !== serials.length) return Response.json({ error: "Every serial must be awaiting batch QC with a recorded repair resolution." }, { status: 409 });
   const shipmentId = crypto.randomUUID();
   await prisma.$transaction([
     ...eligible.map((repair) => prisma.repair.update({ where: { id: repair.id }, data: { status: "back_to_stock", completedAt: new Date() } })),

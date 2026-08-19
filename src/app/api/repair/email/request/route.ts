@@ -5,6 +5,7 @@ import { prisma } from "@/db/prisma";
 import { normalizeEmail } from "@/verification/assertion";
 import { customerEmailSchema } from "@/verification/schemas";
 import { isOtpRequestLimited } from "@/auth/otp-rate-limit";
+import { deliverVerificationCode, emailDeliveryConfigured } from "@/integrations/postmark-email";
 
 const schema = z.object({ email: customerEmailSchema });
 
@@ -22,12 +23,12 @@ export async function POST(request: Request) {
 
   const otp = new OtpService(new PrismaOtpRepository(prisma), secret);
   const challenge = await otp.issue(email, "customer_email");
+  await deliverVerificationCode({ to: email, code: challenge.code, expiresAt: challenge.expiresAt, purpose: "customer" });
 
-  // Local delivery is replaced by the production email adapter at launch.
   return Response.json({
     challengeId: challenge.challengeId,
     expiresAt: challenge.expiresAt.toISOString(),
-    delivery: "local",
-    verificationCode: challenge.code,
+    delivery: emailDeliveryConfigured() ? "email" : "local",
+    ...(process.env.NODE_ENV !== "production" && !emailDeliveryConfigured() ? { verificationCode: challenge.code } : {}),
   });
 }

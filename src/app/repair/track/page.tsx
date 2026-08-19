@@ -44,7 +44,11 @@ export default async function TrackingPage({
   }), prisma.appConfig.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } })]);
 
   if (!order) return null;
-  const view = getCustomerTrackingView(order.status, order.processType?.flow);
+  const inboundShipment = [...order.shipments].reverse().find((shipment) => shipment.type === "inbound");
+  const outboundShipment = [...order.shipments].reverse().find((shipment) => shipment.type === "outbound");
+  const view = getCustomerTrackingView(order.status, order.processType?.flow, { inboundStatus: inboundShipment?.status, outboundStatus: outboundShipment?.status });
+  const returnComplete = inboundShipment?.status === "received" || order.status === "closed";
+  const labelReady = Boolean(inboundShipment && ["label_ready", "in_transit", "delivered"].includes(inboundShipment.status));
   const balanceDueInCents = order.processType ? Math.max(0, order.processType.feeInCents + order.processType.depositInCents - order.amountPaidInCents) : 0;
   const messages = order.messages.map((message) => ({ id: message.id, senderKind: message.senderKind, body: message.body, sentAt: message.createdAt.toISOString(), photos: message.attachments.map((photo) => ({ id: photo.id, name: photo.filename, dataUrl: `data:${photo.contentType};base64,${Buffer.from(photo.data).toString("base64")}` })) }));
 
@@ -93,11 +97,14 @@ export default async function TrackingPage({
               </article>
             </div>
 
-            <div className="mt-6 rounded-2xl bg-[#f7f8f5] p-5 sm:p-6">
+            {!returnComplete ? <div className="mt-6 rounded-2xl bg-[#f7f8f5] p-5 sm:p-6">
               <h2 className="font-semibold">Before returning your device</h2>
               <p className="mt-3 text-sm leading-6 text-black/55">{config.returnInstructions}</p>
-              <p className="mt-4 text-xs text-black/40">Your Teracube-provided label appears here after verification.</p>
-            </div>
+              {labelReady ? <div className="mt-5 flex flex-wrap items-center gap-3">
+                <a href={`/api/repair/label?token=${encodeURIComponent(token)}`} target="_blank" rel="noreferrer" className="inline-flex h-11 cursor-pointer items-center justify-center rounded-xl bg-black px-5 text-sm font-semibold text-white">Open return label</a>
+                {inboundShipment?.trackingNumber ? <span className="font-mono text-xs text-black/50">Tracking: {inboundShipment.trackingNumber}</span> : null}
+              </div> : <p className="mt-4 text-xs text-black/40">Your return label will appear here after Support verifies the request.</p>}
+            </div> : null}
           </div>
         </section>
         <p className="mt-6 text-center text-sm text-black/45">Need help? Send a message above so everything stays with this request.</p>

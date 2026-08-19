@@ -15,6 +15,23 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("clarify"), message: z.string().trim().min(5).max(2000) }),
 ]);
 
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const staff = await getAuthorizedStaff("order:view_all");
+  if (!staff) return Response.json({ error: "Support authorization required." }, { status: 401 });
+  const { id } = await params;
+  if (!await prisma.replacementOrder.findUnique({ where: { id }, select: { id: true } })) {
+    return Response.json({ error: "Order not found." }, { status: 404 });
+  }
+  const messages = await prisma.conversationMessage.findMany({ where: { replacementOrderId: id }, include: { attachments: true }, orderBy: { createdAt: "asc" } });
+  return Response.json({ messages: messages.map((message) => ({
+    id: message.id,
+    senderKind: message.senderKind,
+    body: message.body,
+    sentAt: message.createdAt.toISOString(),
+    photos: message.attachments.map((photo) => ({ id: photo.id, name: photo.filename, dataUrl: `data:${photo.contentType};base64,${Buffer.from(photo.data).toString("base64")}` })),
+  })) });
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const staff = await getAuthorizedStaff("order:verify");
   if (!staff) return Response.json({ error: "Support authorization required." }, { status: 401 });
@@ -103,8 +120,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }),
     prisma.shipment.upsert({
       where: { id: `00000000-0000-4000-8000-${id.replaceAll("-", "").slice(0, 12)}` },
-      update: { status: "label_ready", trackingNumber: label.trackingNumber, labelObjectKey: labelKey, qrCodeObjectKey: label.qrCodeBytes ? qrKey : null },
-      create: { id: `00000000-0000-4000-8000-${id.replaceAll("-", "").slice(0, 12)}`, replacementOrderId: id, type: "inbound", status: "label_ready", provider: "local-shipping", providerShipmentId: label.providerShipmentId, trackingNumber: label.trackingNumber, labelObjectKey: labelKey, qrCodeObjectKey: label.qrCodeBytes ? qrKey : null },
+      update: { status: "label_ready", trackingNumber: label.trackingNumber, labelObjectKey: labelKey, labelFilename: `teracube-return-${order.orderNumber}.txt`, labelContentType: "text/plain", labelData: Buffer.from(label.labelBytes), qrCodeObjectKey: label.qrCodeBytes ? qrKey : null },
+      create: { id: `00000000-0000-4000-8000-${id.replaceAll("-", "").slice(0, 12)}`, replacementOrderId: id, type: "inbound", status: "label_ready", provider: "local-shipping", providerShipmentId: label.providerShipmentId, trackingNumber: label.trackingNumber, labelObjectKey: labelKey, labelFilename: `teracube-return-${order.orderNumber}.txt`, labelContentType: "text/plain", labelData: Buffer.from(label.labelBytes), qrCodeObjectKey: label.qrCodeBytes ? qrKey : null },
     }),
     prisma.conversationMessage.create({ data: { replacementOrderId: id, senderKind: "system", body: `Your request is verified. Return tracking: ${label.trackingNumber}. ${config.returnInstructions}` } }),
     prisma.workItem.updateMany({

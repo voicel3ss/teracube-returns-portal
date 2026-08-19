@@ -17,7 +17,10 @@ export default async function LogisticsPage() {
   }
 
   const [orders, stock, transfers, expectedInbound, recent] = await Promise.all([
-    prisma.replacementOrder.findMany({ where: { reviewState: "reviewed", status: { in: ["awaiting_verification", "return_in_transit", "return_received"] }, outboundDeviceSerial: null }, include: { processType: true, returnedDevice: { include: { model: true } } }, orderBy: { updatedAt: "asc" }, take: 50 }),
+    prisma.replacementOrder.findMany({ where: { reviewState: "reviewed", outboundDeviceSerial: null, OR: [
+      { processType: { flow: "advance" }, status: { in: ["awaiting_verification", "return_in_transit", "return_received"] } },
+      { processType: { flow: "regular" }, status: { in: ["return_in_transit", "return_received"] } },
+    ] }, include: { processType: true, returnedDevice: { include: { model: true } } }, orderBy: { updatedAt: "asc" }, take: 50 }),
     prisma.device.findMany({ where: { circulationState: "in_stock", grade: "refurbished" }, include: { model: true }, orderBy: { updatedAt: "asc" }, take: 100 }),
     prisma.shipment.findMany({ where: { type: "internal_transfer", status: { in: ["created", "label_ready", "in_transit"] } }, include: { units: true }, orderBy: { createdAt: "desc" }, take: 50 }),
     prisma.shipment.findMany({

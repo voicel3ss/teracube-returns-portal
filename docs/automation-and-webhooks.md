@@ -8,6 +8,6 @@ Major Step 7 adds a provider-neutral event boundary while production credentials
 
 ## Scheduled automation
 
-`POST /api/jobs/automation` requires `Authorization: Bearer <AUTOMATION_JOB_SECRET>`. Each run evaluates return reminders, return escalations, unidentified-order escalation, and stale claimed work. Durable markers prevent duplicate reminders and escalations if a scheduler retries the job.
+`POST /api/jobs/automation` requires `Authorization: Bearer <AUTOMATION_JOB_SECRET>`. Each run polls provider tracking for nonterminal shipments, advances shipment/order state only forward, opens Support work for carrier exceptions, attempts a validated outbound-serial backfill, and then evaluates return reminders, return escalations, unidentified-order escalation, and stale claimed work. Durable markers prevent duplicate reminders and escalations if a scheduler retries the job.
 
 Local providers now generate deterministic inbound labels, tracking identifiers, helpdesk replies, commerce references, and object-storage keys. Production adapters retain the same interfaces and replace these local implementations without changing the workflows.

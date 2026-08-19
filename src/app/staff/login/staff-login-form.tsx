@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { GoogleStaffSignIn } from "./google-staff-sign-in";
 
-export function StaffLoginForm() {
+export function StaffLoginForm({ googleClientId }: { googleClientId?: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("support@myteracube.com");
   const [challengeId, setChallengeId] = useState<string | null>(null);
@@ -56,7 +57,9 @@ export function StaffLoginForm() {
   }
 
   return (
-    <form onSubmit={verifyCode} className="mt-7">
+    <>
+    {googleClientId ? <GoogleStaffSignIn clientId={googleClientId} /> : null}
+    <form onSubmit={verifyCode} className={googleClientId ? "" : "mt-7"}>
       <label className="text-sm font-semibold" htmlFor="staff-email">Staff email</label>
       <input
         id="staff-email"
@@ -90,5 +93,6 @@ export function StaffLoginForm() {
       )}
       {error ? <p role="alert" className="mt-4 text-sm text-red-700">{error}</p> : null}
     </form>
+    </>
   );
 }

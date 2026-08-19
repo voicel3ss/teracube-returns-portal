@@ -27,6 +27,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return Response.json({ ok: true });
   }
   const photos = parsed.data.photos.map((item) => ({ objectKey: `data:${item.type};base64,${item.data}`, caption: item.name }));
-  await prisma.$transaction([prisma.repair.update({ where: { id }, data: { status: "back_to_stock", resolutionCategory: parsed.data.resolutionCategory, repairTeamResolution: parsed.data.resolution, detailedNotes: parsed.data.notes, completedAt: new Date(), photos: { create: photos } } }), prisma.device.update({ where: { serial: repair.deviceSerial }, data: { circulationState: "in_stock", grade: "refurbished", currentOwnerId: null } }), prisma.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "repair.qc_passed_back_to_stock", entityType: "repair", entityId: id, metadata: { serial: repair.deviceSerial, resolutionCategory: parsed.data.resolutionCategory } } })]);
+  if (repair.status !== "in_repair") return Response.json({ error: "Only a device currently in repair can be submitted for batch QC." }, { status: 409 });
+  await prisma.$transaction([
+    prisma.repair.update({ where: { id }, data: { status: "qc_pass", resolutionCategory: parsed.data.resolutionCategory, repairTeamResolution: parsed.data.resolution, detailedNotes: parsed.data.notes, completedAt: null, photos: { create: photos } } }),
+    prisma.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "repair.resolution_recorded_awaiting_batch_qc", entityType: "repair", entityId: id, metadata: { serial: repair.deviceSerial, resolutionCategory: parsed.data.resolutionCategory } } }),
+  ]);
   return Response.json({ ok: true });
 }

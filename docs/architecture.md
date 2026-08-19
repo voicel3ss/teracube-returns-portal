@@ -57,7 +57,7 @@ Regular replacement has two independent progress legs after inbound tracking sta
 | Audience | Planned route family | Purpose |
 | --- | --- | --- |
 | Parent | `/repair/*` | Intake, checkout handoff, label, instructions, tracking |
-| Support | `/staff/support/*` | Queue, verification, customers, merges, exceptions, refunds |
+| Support | `/staff/support/*` | Queue, secure intake links, verification, customers, exceptions, refunds, live conversation |
 | Repair | `/staff/repair/*` | Receive, serial ledger, diagnosis, QC, batches, transfers |
 | Logistics | `/staff/logistics/*` | Receive, dispatch, transfer labels |
 | Ops Lead | `/staff/oversight/*` | All work, stale claims, stuck-unit alerts |
@@ -68,7 +68,7 @@ Regular replacement has two independent progress legs after inbound tracking sta
 
 - `CommerceProvider`: Shopify checkout, refunds, and automatic fulfillment.
 - `ShippingProvider`: ShipSaving labels and tracking.
-- `HelpdeskProvider`: Freshdesk ticket creation and threaded replies.
+- `HelpdeskProvider`: optional helpdesk mirroring; portal conversation state stays provider-independent.
 - `IdentityProvider`: Thrive identity resolution and outbound-serial backfill.
 - `PlanProvider`: Gigs lookup by ICCID.
 - `ObjectStorageProvider`: durable label and QR storage through an S3-compatible service.
@@ -76,7 +76,7 @@ Regular replacement has two independent progress legs after inbound tracking sta
 ## Security boundary
 
 - Staff belong to one or more teams; effective permissions are the union of team permissions.
-- PII is masked by default and every reveal becomes an audit event.
+- Parent emails and other PII are masked by default; reveal-gated fields require an audit event.
 - Repair staff cannot reveal parent or child PII.
 - Logistics can reveal an address only on demand; the reveal is audited.
 - Raw payment card data never enters the application.

@@ -37,7 +37,7 @@ See [`docs/security.md`](docs/security.md) for authentication, authorization, PI
 
 See [`docs/parent-journey.md`](docs/parent-journey.md) for the working customer flow, sample device records, and local pricing.
 
-See [`docs/repair-workflow.md`](docs/repair-workflow.md) for the repair-team queue, serial ledger, self-QC, terminal outcomes, and batch-ready flow.
+See [`docs/repair-workflow.md`](docs/repair-workflow.md) for the repair-team queue, serial ledger, recorded resolutions, terminal outcomes, and batch-QC flow.
 
 See [`docs/logistics-workflow.md`](docs/logistics-workflow.md) for inbound reconciliation, outbound dispatch, and internal-transfer label handling.
 
@@ -47,7 +47,7 @@ See [`docs/admin-and-oversight.md`](docs/admin-and-oversight.md) for management 
 
 See [`docs/release-readiness.md`](docs/release-readiness.md) for security controls, CI, container deployment, health checks, and the production launch gate.
 
-See [`docs/support-workflow.md`](docs/support-workflow.md) for the protected work queue, claim verification, customer merge, deposit refund, and secure-link workflow.
+See [`docs/support-workflow.md`](docs/support-workflow.md) for the protected work queue, claim verification, duplicate-request prevention, deposit refunds, live conversation, and secure-link workflow.
 
 For local checkout testing, use the in-form verification code and the “Use sample address” button. Real delivery and address-provider credentials are connected in the production integrations milestone.
 
@@ -59,11 +59,11 @@ The application keeps external services behind provider interfaces. Local develo
 
 | Status | Service / API | Responsibility | Production implementation |
 | --- | --- | --- | --- |
-| Required | [Postmark Email API](https://postmarkapp.com/developer/user-guide/send-email-with-api) | Deliver customer six-digit email-verification codes and transactional messages | Replace the displayed local OTP with private delivery. Configure a verified Teracube sending domain, DKIM/SPF/DMARC, delivery and bounce webhooks, idempotency, rate limits, and generic responses that do not reveal whether an account exists. Never return `verificationCode` outside local mode. |
+| Required | [Postmark Email API](https://postmarkapp.com/developer/user-guide/send-email-with-api) | Deliver customer and staff six-digit verification codes | The adapter activates when its token and sender are configured, and production never returns `verificationCode`. Configure a verified Teracube sending domain, DKIM/SPF/DMARC, delivery and bounce webhooks, and provider-level monitoring before launch. |
 | Required | [Google Address Validation API](https://developers.google.com/maps/documentation/address-validation/overview) | Validate, correct, and standardize shipping addresses | Replace `MockAddressValidationProvider`. For US addresses, request USPS CASS processing, evaluate the verdict and component confirmation levels, show suggested corrections to the parent, and sign only the exact accepted standardized address. Address validation establishes deliverability, not residency or ownership. |
 | Required | [Shopify Admin GraphQL API](https://shopify.dev/docs/api/admin-graphql) and checkout/payment APIs | Create the uniform `$0` or paid order, capture fee plus deposit, retain the shipping address in Shopify, refund deposits, and create silent outbound fulfillment orders | Replace `MockCommerceProvider`. Store only Shopify references and payment last four when available—never raw card data. Suppress Shopify customer notifications because the portal/Freshdesk owns communication. Use idempotency and verify every Shopify webhook signature before changing order state. |
 | Required | [ShipSaving API](https://www.shipsaving.com/) | Create inbound labels and QR codes, purchase postage, and track customer returns and replacements | Replace the shipping mock behind `ShippingProvider`. Persist provider shipment IDs and tracking events. Download label/QR bytes into object storage because provider URLs may expire. Verify signed webhooks where available and run a scheduled tracking poller as a fallback. Confirm the final API contract and webhook documentation with ShipSaving before implementation. |
-| Required | [Freshdesk API](https://developers.freshdesk.com/api/) | Create one communication ticket per replacement order and keep confirmations, tracking, reminders, delays, and refunds in one email thread | Replace `MockHelpdeskProvider`. Create “Teracube Replacement order #xxxx,” store the communication ticket ID, reply to that ticket for every notification, preserve an optional origination ticket, and make webhook processing idempotent. |
+| Optional | [Freshdesk API](https://developers.freshdesk.com/api/) | Mirror requests into the existing helpdesk for internal continuity | Replace `MockHelpdeskProvider` if Teracube wants helpdesk mirroring. The portal's secure live conversation is the parent communication source of truth, so replies and photo uploads do not depend on email. |
 | Required | Thrive device/identity API | Resolve child phone or serial to authoritative serial, ICCID, parent assignment, and later backfill the outbound replacement serial | Replace `MockIdentityProvider`. The exact Thrive base URL, authentication method, schemas, rate limits, and webhook/polling support must be obtained from the internal Thrive owner. Never accept customer-typed model data as authoritative. |
 | Required | [Gigs API](https://developers.gigs.com/) | Look up plan state using the ICCID returned by Thrive | Replace `MockPlanProvider`. Store only the fields needed for eligibility and support; define timeout, retry, and unavailable-provider behavior before launch. |
 | Required | S3-compatible object-storage API | Durably store label PDFs, QR images, repair photos, and manually uploaded internal-transfer labels | Implement `ObjectStorageProvider` using AWS S3, Cloudflare R2, or Tigris. Store object keys in PostgreSQL, use private buckets, validate upload type/size, encrypt at rest, and issue short-lived signed read URLs. |
@@ -74,7 +74,7 @@ The application keeps external services behind provider interfaces. Local develo
 | --- | --- | --- | --- |
 | Required | Google Identity / OpenID Connect | Staff Google sign-in | Validate Google ID tokens server-side, restrict access to active staff records, link the stable provider subject to `StaffIdentity`, and then issue the portal's revocable 30-day staff session. |
 | Required | Postmark Email API | Staff email OTP fallback | Reuse the email delivery adapter while keeping `staff_login` challenges purpose-isolated from `customer_email` challenges. Apply stricter authentication rate limits and non-enumerating responses. |
-| Required | Parent-app signed deep-link API | Let the trusted Parent app open the repair flow already associated with its authenticated parent and device | Replace the `parent-app-preview` token with a short-lived, single-use signed assertion containing parent identity, device identifier, audience, issuer, expiry, and nonce. Validate it only on the server and prevent replay. The owning Parent-app team must define the signing-key or public-key exchange. |
+| Required | Parent-app signed deep-link API | Let the trusted Parent app open the repair flow already associated with its authenticated parent and device | The portal now validates an expiring server-signed entry claim. Production should use the owning Parent-app team's key exchange and add issuer, audience, nonce, and replay protection. |
 
 Firebase Authentication is optional, not required for the current parent flow. It is useful if parents later receive persistent accounts or passwordless magic-link login. It does not replace postal-address validation, Shopify, shipping, or helpdesk APIs, and Firebase's Trigger Email extension still requires an SMTP delivery service. The present account-free, six-digit-code flow is simpler with Postmark.
 
@@ -130,7 +130,7 @@ Exact names may change with the selected adapters, but `.env.example`, runtime v
 3. Shopify checkout, `$0` orders, payment/deposit capture, refunds, fulfillment, and signed webhooks.
 4. ShipSaving labels, QR codes, tracking webhooks, and polling fallback.
 5. Object storage for labels, QR codes, repair photos, and manual uploads.
-6. Freshdesk ticket creation, replies, and notification templates.
+6. Optional Freshdesk request mirroring for internal continuity.
 7. Thrive identity resolution and outbound-serial backfill.
 8. Gigs plan lookup by ICCID.
 9. Google staff SSO and trusted Parent-app deep links.

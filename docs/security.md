@@ -2,12 +2,12 @@
 
 ## Authentication
 
-- Staff can authenticate through Google identity or a six-digit email OTP. Both providers sit behind testable interfaces; development uses deterministic mocks until real credentials are supplied.
+- Staff can authenticate through Google Identity Services or a six-digit email OTP. Google ID tokens are signature-verified against Google's published keys and matched to an active staff email; the button appears when `GOOGLE_STAFF_OAUTH_CLIENT_ID` is configured.
 - OTP codes expire after 10 minutes, are HMAC-hashed at rest, are single-use, and lock after five failures.
 - OTP challenges are purpose-scoped: a customer email code cannot be reused for staff login, or vice versa.
 - Customer email and address confirmations become short-lived, HMAC-signed assertions bound to the exact normalized value. Order APIs verify both assertions rather than trusting browser state.
 - Staff sessions use 256-bit opaque tokens. Only SHA-256 token hashes are stored. Sessions expire after 30 days and can be revoked.
-- Customer links use separate 256-bit tokens scoped to exactly one customer and one replacement order. Parent-app-issued tokens are marked explicitly.
+- Customer tracking links use separate 256-bit tokens scoped to exactly one customer and one replacement order. Intake links are HMAC-signed, expire after seven days, and bind the source, normalized parent email, and serial.
 - Unknown and inactive staff OTP requests return the same response as valid requests to prevent account enumeration.
 
 ## Authorization
@@ -20,7 +20,7 @@
 
 ## PII
 
-- UI values are masked by default.
+- Parent emails are masked in staff-facing customer and order screens. Other PII remains masked or reveal-gated, and Repair never receives parent PII.
 - Shipping addresses have an authenticated AES-256-GCM encryption helper for application-layer encryption before persistence.
 - Every successful reveal must persist an audit event before plaintext is returned. If audit persistence fails, the reveal fails closed.
 - Audit metadata records the field and active team, never the revealed value.

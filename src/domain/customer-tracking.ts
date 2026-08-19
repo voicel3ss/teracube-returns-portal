@@ -9,7 +9,7 @@ export type CustomerTrackingView = {
   replacementStatus: string;
 };
 
-export function getCustomerTrackingView(
+function getBaseCustomerTrackingView(
   status: ReplacementOrderStatus,
   flow?: ReplacementFlow,
 ): CustomerTrackingView {
@@ -98,4 +98,25 @@ export function getCustomerTrackingView(
         replacementStatus: "Pending verification",
       };
   }
+}
+
+export function getCustomerTrackingView(
+  status: ReplacementOrderStatus,
+  flow?: ReplacementFlow,
+  shipments?: { inboundStatus?: string | null; outboundStatus?: string | null },
+): CustomerTrackingView {
+  const view = getBaseCustomerTrackingView(status, flow);
+  if (["unidentified", "return_discrepancy", "fulfillment_blocked"].includes(status)) return view;
+  return {
+    ...view,
+    returnStatus: shipments?.inboundStatus === "received" ? "Received"
+      : shipments?.inboundStatus === "delivered" ? "Delivered to Teracube; awaiting check-in"
+      : shipments?.inboundStatus === "in_transit" ? "In transit"
+      : shipments?.inboundStatus === "label_ready" ? "Label ready"
+      : view.returnStatus,
+    replacementStatus: shipments?.outboundStatus === "delivered" ? "Delivered"
+      : shipments?.outboundStatus === "in_transit" ? "In transit"
+      : shipments?.outboundStatus === "label_ready" ? "Preparing to ship"
+      : view.replacementStatus,
+  };
 }

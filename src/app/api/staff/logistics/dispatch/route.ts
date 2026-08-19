@@ -8,8 +8,12 @@ export async function POST(request: Request) {
   if (!staff) return Response.json({ error: "Logistics authorization required." }, { status: 401 });
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return Response.json({ error: "Select an order, an in-stock serial, carrier, and tracking number." }, { status: 400 });
-  const order = await prisma.replacementOrder.findFirst({ where: { id: parsed.data.orderId, reviewState: "reviewed", status: { in: ["awaiting_verification", "return_in_transit", "return_received"] } } });
+  const order = await prisma.replacementOrder.findFirst({ where: { id: parsed.data.orderId, reviewState: "reviewed", status: { in: ["awaiting_verification", "return_in_transit", "return_received"] } }, include: { processType: true } });
   if (!order) return Response.json({ error: "This order is not ready for outbound dispatch." }, { status: 409 });
+  if (!order.processType) return Response.json({ error: "This order does not have a replacement path." }, { status: 409 });
+  if (order.processType.flow === "regular" && !["return_in_transit", "return_received"].includes(order.status)) {
+    return Response.json({ error: "A regular replacement can ship only after the customer return is in transit." }, { status: 409 });
+  }
   const device = await prisma.device.findFirst({ where: { serial: parsed.data.serial.toUpperCase(), circulationState: "in_stock", grade: "refurbished" } });
   if (!device) return Response.json({ error: "That serial is not available in refurbished stock." }, { status: 409 });
   const shipment = await prisma.$transaction(async (tx) => {

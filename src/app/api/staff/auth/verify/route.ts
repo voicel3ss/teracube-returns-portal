@@ -5,6 +5,7 @@ import { STAFF_SESSION_COOKIE } from "@/auth/staff-request";
 import { StaffSessionService } from "@/auth/staff-session";
 import { PrismaOtpRepository, PrismaStaffSessionRepository } from "@/db/auth-repositories";
 import { prisma } from "@/db/prisma";
+import { staffDestination } from "@/auth/staff-destination";
 
 const schema = z.object({
   email: z.string().trim().email(),
@@ -38,17 +39,6 @@ export async function POST(request: Request) {
     path: "/",
     expires: session.expiresAt,
   });
-  const teams = new Set(staff.memberships.map((membership) => membership.team));
-  const destination = teams.has("admin")
-    ? "/staff/admin"
-    : teams.has("ops_lead")
-      ? "/staff/oversight"
-      : teams.has("support")
-        ? "/staff/support"
-        : teams.has("repair")
-      ? "/staff/repair"
-      : teams.has("logistics")
-        ? "/staff/logistics"
-        : "/staff/login";
+  const destination = staffDestination(staff.memberships.map((membership) => membership.team));
   return Response.json({ ok: true, destination });
 }

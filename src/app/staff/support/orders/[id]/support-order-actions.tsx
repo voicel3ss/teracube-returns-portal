@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 
 type WorkItem = { id: string; status: string; assignedToStaffId: string | null; assignedToName: string | null };
 
-export function SupportOrderActions({ orderId, workItem, staffId, reviewState, initialFault, coverage, requiresFreeReason, refundableDepositInCents, refundEligible }: {
+export function SupportOrderActions({ orderId, workItem, staffId, canAssign, assignableStaff, reviewState, initialFault, coverage, requiresFreeReason, refundableDepositInCents, refundEligible }: {
   orderId: string;
   workItem: WorkItem | null;
   staffId: string;
+  canAssign: boolean;
+  assignableStaff: Array<{ id: string; displayName: string }>;
   reviewState: string;
   initialFault: string;
   coverage: "warranty" | "accident";
@@ -23,6 +25,7 @@ export function SupportOrderActions({ orderId, workItem, staffId, reviewState, i
   const [accidentalFreeBasis, setAccidentalFreeBasis] = useState<"" | "paid" | "plan" | "courtesy">("");
   const [pauseNote, setPauseNote] = useState("");
   const [note, setNote] = useState("");
+  const [assigneeId, setAssigneeId] = useState(workItem?.assignedToStaffId ?? "");
   const [refundDollars, setRefundDollars] = useState((refundableDepositInCents / 100).toFixed(2));
   const [customerLink, setCustomerLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -75,7 +78,16 @@ export function SupportOrderActions({ orderId, workItem, staffId, reviewState, i
         </section>
       ) : null}
 
-      {reviewState === "reviewed" ? <section className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-6"><p className="font-semibold text-emerald-900">Claim verified</p><p className="mt-2 text-sm leading-6 text-emerald-800/70">The label gate is released. Shipping automation is connected in a later milestone.</p></section> : <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
+      {workItem && canAssign ? <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
+        <h2 className="font-semibold">Assign to staff</h2>
+        <label className="mt-3 block text-sm font-semibold">Team member</label>
+        <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm"><option value="">Select a team member</option>{assignableStaff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}</select>
+        <label className="mt-3 block text-sm font-semibold">Assignment note</label>
+        <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Why is this being assigned?" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm" />
+        <button type="button" onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "assign", staffUserId: assigneeId, note })} disabled={busy || !assigneeId || note.trim().length < 2} className="mt-3 h-10 w-full cursor-pointer rounded-xl border border-black/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-35">Assign item</button>
+      </section> : null}
+
+      {reviewState === "reviewed" ? <section className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-6"><p className="font-semibold text-emerald-900">Claim verified</p><p className="mt-2 text-sm leading-6 text-emerald-800/70">The return label is available to the customer and the replacement can move to Logistics when its path is ready.</p></section> : <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--green-strong)]">Verification gate</p>
         <label className="mt-4 block text-sm font-semibold">Support-verified fault</label>
         <textarea value={fault} onChange={(event) => setFault(event.target.value)} rows={4} className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm outline-none focus:border-[var(--green-strong)]" />

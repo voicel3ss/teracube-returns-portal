@@ -5,6 +5,7 @@ import { prisma } from "@/db/prisma";
 
 const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("claim"), note: z.string().trim().max(500).optional() }),
+  z.object({ action: z.literal("assign"), staffUserId: z.string().uuid(), note: z.string().trim().min(2).max(500) }),
   z.object({ action: z.literal("snooze"), days: z.union([z.literal(1), z.literal(3), z.literal(7)]), note: z.string().trim().min(2).max(500) }),
 ]);
 
@@ -43,6 +44,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           metadata: { previousAssigneeId: item.assignedToStaffId, note: parsed.data.note || null },
         },
       }),
+    ]);
+  } else if (parsed.data.action === "assign") {
+    if (!hasPermission(staff.teams, "queue:assign")) return Response.json({ error: "Ops Lead or Admin authorization required." }, { status: 403 });
+    const assignee = await prisma.staffUser.findFirst({ where: { id: parsed.data.staffUserId, active: true, memberships: { some: { team: { in: ["support", "ops_lead", "admin"] } } } } });
+    if (!assignee) return Response.json({ error: "Choose an active Support, Ops Lead, or Admin user." }, { status: 409 });
+    await prisma.$transaction([
+      prisma.workItem.update({ where: { id }, data: { assignedToStaffId: assignee.id, status: "claimed", snoozedUntil: null, assignmentNote: parsed.data.note, lastActivityAt: new Date() } }),
+      prisma.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "work_item.assigned", entityType: "work_item", entityId: id, metadata: { previousAssigneeId: item.assignedToStaffId, assigneeId: assignee.id, note: parsed.data.note } } }),
     ]);
   } else {
     if (item.assignedToStaffId !== staff.id && !hasPermission(staff.teams, "queue:assign")) {

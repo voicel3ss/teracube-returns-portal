@@ -18,6 +18,8 @@ const sampleDevices = [
   { model: "Teracube 2e", serial: "202112T2E235968", phone: "(206) 555-0142" },
   { model: "Teracube 2s", serial: "202503T2S118842", phone: "(206) 555-0177" },
   { model: "Teracube 4", serial: "202401TC4009317", phone: "(206) 555-0199" },
+  { model: "Teracube 4", serial: "202402TC4009418", phone: "(206) 555-0164" },
+  { model: "Teracube 2e", serial: "202403T2E236105", phone: "(206) 555-0185" },
 ] as const;
 
 type FaultCategory = (typeof faultChoices)[number][0];
@@ -41,6 +43,16 @@ type ReplacementOption = {
 type Step = "identify" | "confirm" | "fault" | "options" | "checkout" | "done";
 
 const stepOrder: Step[] = ["identify", "confirm", "fault", "options", "checkout", "done"];
+
+async function readApiResponse(response: Response) {
+  const text = await response.text();
+  if (!text) return { error: "The server could not complete that request. Check that the local database is running and try again." };
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: "The server returned an invalid response. Please try again." };
+  }
+}
 
 function money(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -109,7 +121,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
                 : { childPhone: identifier, parentEmail: email, emailVerificationToken },
           ),
         });
-        const body = await response.json();
+        const body = await readApiResponse(response);
         if (!response.ok) throw new Error(body.error ?? "We couldn't check that device.");
         if (body.status === "unidentified") {
           setLookupFailed(true);
@@ -121,7 +133,8 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
         }
         setDevice(body.device);
         setIdentifier(body.device.serial);
-        if (body.parentEmail && !body.parentEmail.toLowerCase().endsWith("@example.com")) setEmail(body.parentEmail);
+        if (body.parentEmail) setEmail(body.parentEmail);
+        if (body.emailVerificationToken) setEmailVerificationToken(body.emailVerificationToken);
         setStep("confirm");
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "We couldn't check that device.");
@@ -153,7 +166,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modelId: device.modelId, faultCategory, faultText }),
       });
-      const body = await response.json();
+      const body = await readApiResponse(response);
       if (!response.ok) throw new Error(body.error ?? "Replacement options are unavailable.");
       setCoverage(body.coverage);
       setOptions(body.options);
@@ -179,7 +192,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ parentEmail: email, emailVerificationToken }),
       });
-      const body = await response.json();
+      const body = await readApiResponse(response);
       if (!response.ok) throw new Error(body.error ?? "We couldn't create the request.");
       setResult(body);
       setStep("done");
@@ -207,7 +220,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const body = await response.json();
+      const body = await readApiResponse(response);
       if (!response.ok) throw new Error(body.error ?? "We couldn't send a verification code.");
       setEmailChallengeId(body.challengeId);
       setLocalEmailCode(body.verificationCode ?? null);
@@ -229,7 +242,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, challengeId: emailChallengeId, code: emailCode }),
       });
-      const body = await response.json();
+      const body = await readApiResponse(response);
       if (!response.ok) throw new Error(body.error ?? "We couldn't verify that email.");
       setEmail(body.email);
       setEmailVerificationToken(body.verificationToken);
@@ -268,7 +281,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address: { ...address, country: "US" } }),
       });
-      const body = await response.json();
+      const body = await readApiResponse(response);
       if (!response.ok) throw new Error(body.error ?? "We couldn't validate that address.");
       const { country: _country, ...normalizedAddress } = body.normalizedAddress;
       void _country;
@@ -304,7 +317,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
           photos,
         }),
       });
-      const body = await response.json();
+      const body = await readApiResponse(response);
       if (response.status === 409 && body.code === "ACTIVE_REQUEST_EXISTS") {
         setActiveRequest({ orderNumber: body.orderNumber, trackingUrl: body.trackingUrl });
         return;
@@ -430,7 +443,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
                 </div>
                 {localEmailCode ? (
                   <p className="mt-3 text-xs leading-5 text-black/50">
-                    Local verification code: <strong className="font-mono text-black">{localEmailCode}</strong>. A production email provider will send this privately.
+                    Verification code for local testing: <strong className="font-mono text-black">{localEmailCode}</strong>
                   </p>
                 ) : null}
               </div>
@@ -639,10 +652,10 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
 
         {step === "checkout" && selectedOption ? (
           <form onSubmit={submitOrder}>
-            <p className="text-sm font-semibold text-[var(--green-strong)]">Mock Shopify checkout</p>
+            <p className="text-sm font-semibold text-[var(--green-strong)]">Secure checkout</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">Confirm your shipping address</h1>
             <p className="mt-3 text-sm leading-6 text-black/55">
-              This local build simulates payment. No card information is requested or stored.
+              Confirm where the replacement and return materials should be sent. Card information is never stored by Teracube.
             </p>
             {!emailVerificationToken ? (
               <div className="mt-6 rounded-2xl border border-black/10 p-5">
@@ -686,9 +699,9 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
               </div>
             )}
             <div className="mt-5 flex items-center justify-between gap-4 rounded-xl border border-[var(--green)]/35 bg-[var(--mint)]/20 px-4 py-3 text-sm">
-              <p className="leading-5 text-black/60">The local validator recognizes Teracube&apos;s public Redmond contact address.</p>
+              <p className="leading-5 text-black/60">Use Teracube&apos;s public Redmond address while testing this form.</p>
               <button type="button" onClick={useSampleAddress} className="shrink-0 font-semibold underline underline-offset-4">
-                Use sample address
+                Use testing address
               </button>
             </div>
             <div className="mt-7 grid gap-4 sm:grid-cols-2">
@@ -764,7 +777,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
       </section>
 
       <p className="mt-6 text-center text-xs leading-5 text-black/40">
-        Teracube keeps your request history secure. Payment details stay with Shopify in production.
+        Teracube keeps your request history secure. Payment details stay with the payment provider.
       </p>
     </div>
   );

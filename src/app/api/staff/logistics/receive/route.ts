@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   if (!staff) return Response.json({ error: "Logistics authorization required." }, { status: 401 });
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return Response.json({ error: "Enter the inbound tracking number and package contents." }, { status: 400 });
-  const shipment = await prisma.shipment.findFirst({ where: { trackingNumber: parsed.data.trackingNumber, type: "inbound" }, include: { replacementOrder: true } });
+  const shipment = await prisma.shipment.findFirst({ where: { trackingNumber: parsed.data.trackingNumber, type: "inbound" }, include: { replacementOrder: { include: { shipments: true } } } });
   if (!shipment) return Response.json({ error: "No inbound shipment matches that tracking number." }, { status: 404 });
 
   let observedSerial: string | null = null;
@@ -32,7 +32,8 @@ export async function POST(request: Request) {
     await tx.shipment.update({ where: { id: shipment.id }, data: { status: "received", receivedAt: new Date(), contentsPresent: parsed.data.contentsPresent, contentsNotes: parsed.data.notes || null } });
     if (shipment.replacementOrderId) {
       const discrepancy = result === "mismatch" || result === "missing";
-      await tx.replacementOrder.update({ where: { id: shipment.replacementOrderId }, data: { status: discrepancy ? "return_discrepancy" : "return_received", ...(result === "unidentified" && observedSerial ? { returnedDeviceSerial: observedSerial } : {}) } });
+      const outboundDelivered = shipment.replacementOrder?.shipments.some((item) => item.type === "outbound" && item.status === "delivered") ?? false;
+      await tx.replacementOrder.update({ where: { id: shipment.replacementOrderId }, data: { status: discrepancy ? "return_discrepancy" : outboundDelivered ? "closed" : "return_received", ...(result === "unidentified" && observedSerial ? { returnedDeviceSerial: observedSerial } : {}) } });
       if (discrepancy) await tx.workItem.upsert({ where: { replacementOrderId_kind: { replacementOrderId: shipment.replacementOrderId, kind: "return_discrepancy" } }, update: { status: "open", lastActivityAt: new Date() }, create: { replacementOrderId: shipment.replacementOrderId, team: "support", kind: "return_discrepancy" } });
     }
     await tx.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "shipment.inbound_received", entityType: "shipment", entityId: shipment.id, metadata: { result, observedSerial, contentsPresent: parsed.data.contentsPresent } } });

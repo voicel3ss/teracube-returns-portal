@@ -34,6 +34,18 @@ const DEVICE_RECORDS: MockDeviceRecord[] = [
     iccid: "8901260123456789099",
     parentEmail: "alex@example.com",
   },
+  {
+    serial: "202402TC4009418",
+    childPhone: "+12065550164",
+    iccid: "8901260123456789064",
+    parentEmail: "casey@example.com",
+  },
+  {
+    serial: "202403T2E236105",
+    childPhone: "+12065550185",
+    iccid: "8901260123456789085",
+    parentEmail: "morgan@example.com",
+  },
 ];
 
 function normalizePhone(phone: string): string {
@@ -55,11 +67,6 @@ export class MockIdentityProvider implements IdentityProvider {
     return null;
   }
 
-  async resolveParentAppEntry(entryToken: string) {
-    const index = entryToken === "parent-app-preview" ? 0 : -1;
-    const record = DEVICE_RECORDS[index];
-    return record ? { serial: record.serial, parentEmail: record.parentEmail } : null;
-  }
 }
 
 export class MockPlanProvider implements PlanProvider {

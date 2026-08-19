@@ -41,8 +41,8 @@ export default function Home() {
               <Link href="/repair/start" className="inline-flex h-13 items-center justify-center rounded-full bg-black px-8 font-semibold text-white transition hover:bg-black/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black">
                 Start a request
               </Link>
-              <Link href="/repair/start?entry=parent-app-preview" className="inline-flex h-13 items-center justify-center rounded-full border border-black/15 bg-white px-8 font-semibold text-black/65 transition hover:border-black/30 hover:text-black">
-                Continue from Parent app
+              <Link href="/repair/start" className="inline-flex h-13 items-center justify-center rounded-full border border-black/15 bg-white px-8 font-semibold text-black/65 transition hover:border-black/30 hover:text-black">
+                Find it with the Parent app
               </Link>
             </div>
             <p className="mt-4 text-sm text-black/45">No account needed. Have the device or child’s phone number nearby.</p>
@@ -78,7 +78,7 @@ export default function Home() {
         <div className="mt-6 flex flex-col gap-5 rounded-3xl bg-[var(--ink)] p-7 text-white sm:flex-row sm:items-center sm:justify-between sm:p-9">
           <div>
             <h2 className="text-2xl font-semibold tracking-[-0.025em]">Already started a request?</h2>
-            <p className="mt-2 text-sm text-white/60">Open the secure link in your confirmation email to see the latest status at any time.</p>
+            <p className="mt-2 text-sm text-white/60">Use your secure request link to see the latest status and talk with Support at any time.</p>
           </div>
           <p className="shrink-0 rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-white/75">Updates stay in one place</p>
         </div>
@@ -116,7 +116,7 @@ export default function Home() {
           <div className="mt-10 border-t border-white/15 pt-6">
             <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-7 gap-y-3 text-sm font-medium text-white/65">
               <Link href="/repair/start" className="transition hover:text-white">Start a request</Link>
-              <Link href="/repair/start?entry=parent-app-preview" className="transition hover:text-white">Parent app entry</Link>
+              <Link href="/repair/start" className="transition hover:text-white">Find your serial</Link>
               <a href="https://myteracube.com/pages/contact-us" target="_blank" rel="noreferrer" className="transition hover:text-white">Contact Teracube</a>
               <a href="https://myteracube.com/pages/privacy-policy" target="_blank" rel="noreferrer" className="transition hover:text-white">Privacy</a>
               <Link href="/staff/login" className="transition hover:text-white">Staff sign in</Link>
