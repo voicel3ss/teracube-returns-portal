@@ -12,6 +12,7 @@ const schema = z.discriminatedUnion("action", [
     freeOutcomeReason: z.string().trim().max(1000).optional(),
   }),
   z.object({ action: z.literal("reprice"), csVerifiedFault: z.string().trim().min(3).max(1000) }),
+  z.object({ action: z.literal("message"), message: z.string().trim().min(5).max(2000) }),
   z.object({ action: z.literal("clarify"), message: z.string().trim().min(5).max(2000) }),
 ]);
 
@@ -38,15 +39,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid review." }, { status: 400 });
   const { id } = await params;
-  const order = await prisma.replacementOrder.findUnique({ where: { id }, include: { processType: true, returnedDevice: true } });
+  const order = await prisma.replacementOrder.findUnique({
+    where: { id },
+    include: {
+      processType: true,
+      returnedDevice: true,
+      workItems: { where: { team: "support", status: { not: "completed" } }, select: { id: true } },
+    },
+  });
   if (!order) return Response.json({ error: "Order not found." }, { status: 404 });
 
-  if (parsed.data.action === "clarify") {
+  if (parsed.data.action === "clarify" || parsed.data.action === "message") {
+    const asksForReply = parsed.data.action === "clarify";
     if (order.communicationTicketId) {
       await mockHelpdeskProvider.reply({ ticketId: order.communicationTicketId, body: parsed.data.message });
     }
     await prisma.$transaction([
-      prisma.replacementOrder.update({ where: { id }, data: { reviewState: "needs_clarification" } }),
+      ...(asksForReply
+        ? [prisma.replacementOrder.update({ where: { id }, data: { reviewState: "needs_clarification" } })]
+        : []),
+      ...(asksForReply && order.workItems.length === 0
+        ? [prisma.workItem.upsert({
+          where: { replacementOrderId_kind: { replacementOrderId: id, kind: "needs_clarification" } },
+          update: { status: "snoozed", assignedToStaffId: staff.id, snoozedUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), lastActivityAt: new Date() },
+          create: { replacementOrderId: id, team: "support", kind: "needs_clarification", status: "snoozed", assignedToStaffId: staff.id, snoozedUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+        })]
+        : []),
       prisma.conversationMessage.create({
         data: { replacementOrderId: id, senderKind: "staff", body: parsed.data.message },
       }),
@@ -55,7 +73,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         data: {
           actorStaffId: staff.id,
           actorKind: "staff",
-          action: "replacement_order.clarification_requested",
+          action: asksForReply ? "replacement_order.clarification_requested" : "replacement_order.staff_message_sent",
           entityType: "replacement_order",
           entityId: id,
           metadata: {
@@ -66,7 +84,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
       }),
     ]);
-    return Response.json({ ok: true, reviewState: "needs_clarification" });
+    return Response.json({ ok: true, reviewState: asksForReply ? "needs_clarification" : order.reviewState });
   }
 
   if (parsed.data.action === "reprice") {
@@ -84,7 +102,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (balanceDue === 0) return Response.json({ error: "This order is already fully paid. Refresh the page and verify it." }, { status: 409 });
     const customerMessage = `Support confirmed accidental damage. A payment of $${(balanceDue / 100).toFixed(2)} is required before we can release the return label or replacement.`;
     await prisma.$transaction([
-      prisma.replacementOrder.update({ where: { id }, data: { processTypeId: paidProcess.id, csVerifiedFault: parsed.data.csVerifiedFault, reviewState: "needs_clarification", status: "submitted", freeOutcomeReason: null } }),
+      prisma.replacementOrder.update({ where: { id }, data: { processTypeId: paidProcess.id, csVerifiedFault: parsed.data.csVerifiedFault, reviewState: "needs_clarification", status: "submitted", freeOutcomeReason: null, resolution: null } }),
       prisma.conversationMessage.create({ data: { replacementOrderId: id, senderKind: "system", body: customerMessage } }),
       prisma.workItem.updateMany({ where: { replacementOrderId: id, kind: "claim_verification", status: { not: "completed" } }, data: { lastActivityAt: new Date(), snoozedUntil: null } }),
       prisma.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "replacement_order.repriced_for_accidental_damage", entityType: "replacement_order", entityId: id, metadata: { previousProcessTypeId: order.processType.id, processTypeId: paidProcess.id, balanceDueInCents: balanceDue } } }),
@@ -116,6 +134,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         reviewState: "reviewed",
         csVerifiedFault: parsed.data.csVerifiedFault,
         freeOutcomeReason: parsed.data.freeOutcomeReason || null,
+        resolution: order.processType.feeInCents > 0 ? "paid_refurb" : "free_refurb",
       },
     }),
     prisma.shipment.upsert({
@@ -125,7 +144,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }),
     prisma.conversationMessage.create({ data: { replacementOrderId: id, senderKind: "system", body: `Your request is verified. Return tracking: ${label.trackingNumber}. ${config.returnInstructions}` } }),
     prisma.workItem.updateMany({
-      where: { replacementOrderId: id, kind: "claim_verification", status: { not: "completed" } },
+      where: { replacementOrderId: id, kind: { in: ["claim_verification", "needs_clarification"] }, status: { not: "completed" } },
       data: { status: "completed", lastActivityAt: new Date(), snoozedUntil: null },
     }),
     prisma.auditEvent.create({

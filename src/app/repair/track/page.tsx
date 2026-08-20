@@ -4,6 +4,7 @@ import { BrandHeader } from "@/components/brand-header";
 import { PrismaCustomerTokenRepository } from "@/db/auth-repositories";
 import { prisma } from "@/db/prisma";
 import { getCustomerTrackingView } from "@/domain/customer-tracking";
+import { resolveCustomerTrackingCopy } from "@/domain/customer-tracking-copy";
 import { CustomerConversation } from "./customer-conversation";
 import { PaymentDue } from "./payment-due";
 
@@ -46,7 +47,7 @@ export default async function TrackingPage({
   if (!order) return null;
   const inboundShipment = [...order.shipments].reverse().find((shipment) => shipment.type === "inbound");
   const outboundShipment = [...order.shipments].reverse().find((shipment) => shipment.type === "outbound");
-  const view = getCustomerTrackingView(order.status, order.processType?.flow, { inboundStatus: inboundShipment?.status, outboundStatus: outboundShipment?.status });
+  const view = getCustomerTrackingView(order.status, order.processType?.flow, { inboundStatus: inboundShipment?.status, outboundStatus: outboundShipment?.status }, order.reviewState, resolveCustomerTrackingCopy(config.customerTrackingCopy));
   const returnComplete = inboundShipment?.status === "received" || order.status === "closed";
   const labelReady = Boolean(inboundShipment && ["label_ready", "in_transit", "delivered"].includes(inboundShipment.status));
   const balanceDueInCents = order.processType ? Math.max(0, order.processType.feeInCents + order.processType.depositInCents - order.amountPaidInCents) : 0;

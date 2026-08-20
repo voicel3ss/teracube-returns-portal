@@ -23,7 +23,8 @@ export function StaffAccountsForm({ accounts, currentStaffId }: { accounts: Acco
     setBusy(true); setNotice(null);
     try {
       const response = await fetch("/api/staff/admin/users", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const data = await response.json();
+      const responseText = await response.text();
+      const data = responseText ? JSON.parse(responseText) : {};
       if (!response.ok) throw new Error(data.error ?? "The staff account could not be saved.");
       setNotice("Staff account saved.");
       if (method === "POST") { setEmail(""); setDisplayName(""); setTeams(["support"]); }

@@ -6,7 +6,16 @@ const photo = z.object({ name: z.string().max(200), type: z.enum(["image/jpeg", 
 const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("start") }),
   z.object({ action: z.literal("complete"), resolutionCategory: z.enum(["screen", "charging", "camera", "calls_cellular", "battery", "buttons", "water_damage", "other"]), resolution: z.string().trim().min(3).max(2000), notes: z.string().trim().max(4000), photos: z.array(photo).max(3).default([]) }),
-  z.object({ action: z.literal("terminal"), disposition: z.enum(["scrap", "parts_harvest", "beyond_economic_repair"]), reason: z.string().trim().min(3).max(2000) }),
+  z.object({
+    action: z.literal("terminal"),
+    disposition: z.enum(["scrap", "parts_harvest", "beyond_economic_repair"]),
+    terminalSubDisposition: z.enum(["water_damage", "destroyed"]).optional(),
+    reason: z.string().trim().min(3).max(2000),
+  }).superRefine((value, context) => {
+    if (value.disposition === "beyond_economic_repair" && !value.terminalSubDisposition) {
+      context.addIssue({ code: "custom", path: ["terminalSubDisposition"], message: "Choose whether the device has water damage or is destroyed." });
+    }
+  }),
 ]);
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -23,7 +32,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return Response.json({ ok: true });
   }
   if (parsed.data.action === "terminal") {
-    await prisma.$transaction([prisma.repair.update({ where: { id }, data: { status: "terminal_fail", terminalDisposition: parsed.data.disposition, terminalReason: parsed.data.reason, completedAt: new Date() } }), prisma.device.update({ where: { serial: repair.deviceSerial }, data: { circulationState: "retired", currentOwnerId: null } }), prisma.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "repair.terminal_fail", entityType: "repair", entityId: id, metadata: { serial: repair.deviceSerial, disposition: parsed.data.disposition } } })]);
+    const terminalSubDisposition = parsed.data.disposition === "beyond_economic_repair" ? parsed.data.terminalSubDisposition : null;
+    await prisma.$transaction([prisma.repair.update({ where: { id }, data: { status: "terminal_fail", terminalDisposition: parsed.data.disposition, terminalSubDisposition, terminalReason: parsed.data.reason, completedAt: new Date() } }), prisma.device.update({ where: { serial: repair.deviceSerial }, data: { circulationState: "retired", currentOwnerId: null } }), prisma.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "repair.terminal_fail", entityType: "repair", entityId: id, metadata: { serial: repair.deviceSerial, disposition: parsed.data.disposition, terminalSubDisposition } } })]);
     return Response.json({ ok: true });
   }
   const photos = parsed.data.photos.map((item) => ({ objectKey: `data:${item.type};base64,${item.data}`, caption: item.name }));

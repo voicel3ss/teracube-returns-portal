@@ -315,6 +315,7 @@ model Repair {
   repairTeamResolution String?              @map("repair_team_resolution")
   detailedNotes        String?              @map("detailed_notes")
   terminalDisposition  TerminalDisposition? @map("terminal_disposition")
+  terminalSubDisposition String?             @map("terminal_sub_disposition")
   terminalReason       String?              @map("terminal_reason")
   receivedAt           DateTime             @default(now()) @map("received_at")
   completedAt          DateTime?            @map("completed_at")
@@ -550,6 +551,7 @@ model AppConfig {
   unidentifiedEscalationDays Int      @default(2) @map("unidentified_escalation_days")
   stuckRepairDays            Int      @default(3) @map("stuck_repair_days")
   returnInstructions         String   @default("Factory-reset the device, keep your SIM card, and pack it safely.") @map("return_instructions")
+  customerTrackingCopy       Json     @default("{}") @map("customer_tracking_copy")
   updatedAt                  DateTime @updatedAt @map("updated_at")
 
   @@map("app_config")

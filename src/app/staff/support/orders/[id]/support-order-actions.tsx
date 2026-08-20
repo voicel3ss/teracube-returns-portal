@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 type WorkItem = { id: string; status: string; assignedToStaffId: string | null; assignedToName: string | null };
 
-export function SupportOrderActions({ orderId, workItem, staffId, canAssign, assignableStaff, reviewState, initialFault, coverage, requiresFreeReason, refundableDepositInCents, refundEligible }: {
+export function SupportOrderActions({ orderId, workItem, staffId, canAssign, assignableStaff, reviewState, initialFault, coverage, resolution: initialResolution, requiresFreeReason, refundableDepositInCents, refundEligible }: {
   orderId: string;
   workItem: WorkItem | null;
   staffId: string;
@@ -14,6 +14,7 @@ export function SupportOrderActions({ orderId, workItem, staffId, canAssign, ass
   reviewState: string;
   initialFault: string;
   coverage: "warranty" | "accident";
+  resolution: string | null;
   requiresFreeReason: boolean;
   refundableDepositInCents: number;
   refundEligible: boolean;
@@ -27,6 +28,7 @@ export function SupportOrderActions({ orderId, workItem, staffId, canAssign, ass
   const [note, setNote] = useState("");
   const [assigneeId, setAssigneeId] = useState(workItem?.assignedToStaffId ?? "");
   const [refundDollars, setRefundDollars] = useState((refundableDepositInCents / 100).toFixed(2));
+  const [resolution, setResolution] = useState(initialResolution ?? "");
   const [customerLink, setCustomerLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +131,12 @@ export function SupportOrderActions({ orderId, workItem, staffId, canAssign, ass
         <p className="mt-2 text-sm leading-6 text-black/50">Create a secure 30-day tracking link for this customer.</p>
         <button onClick={generateCustomerLink} disabled={busy} className="mt-3 h-10 w-full rounded-xl border border-black/15 text-sm font-semibold">Generate customer link</button>
         {customerLink ? <input readOnly value={customerLink} onFocus={(event) => event.currentTarget.select()} aria-label="Secure customer link" className="mt-3 w-full rounded-xl bg-black/[0.04] p-3 text-xs" /> : null}
+      </section>
+      <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
+        <h2 className="font-semibold">Customer outcome</h2>
+        <p className="mt-2 text-sm leading-6 text-black/50">This powers the outcome report. Verification sets the normal result automatically; use this for upgrades, no-replacement decisions, or exceptions.</p>
+        <select value={resolution} onChange={(event) => setResolution(event.target.value)} className="mt-3 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm"><option value="">Not decided</option><option value="free_refurb">Free replacement</option><option value="paid_refurb">Paid replacement</option><option value="upgrade">Upgrade</option><option value="no_replacement">No replacement</option><option value="exception">Exception</option></select>
+        <button type="button" onClick={() => mutate(`/api/staff/support/orders/${orderId}/resolution`, "PATCH", { resolution })} disabled={busy || !resolution || resolution === initialResolution} className="mt-3 h-10 w-full cursor-pointer rounded-xl border border-black/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-35">Save customer outcome</button>
       </section>
       {refundableDepositInCents > 0 ? <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
         <h2 className="font-semibold">Refund deposit</h2>

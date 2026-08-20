@@ -8,7 +8,7 @@ type Message = { id: string; senderKind: string; body: string; sentAt: string; p
 export function StaffConversation({ orderId, messages: initialMessages, canReply }: { orderId: string; messages: Message[]; canReply: boolean }) {
   const [messages, setMessages] = useState(initialMessages);
   const [reply, setReply] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<"message" | "clarify" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refreshMessages = useCallback(async () => {
@@ -30,11 +30,11 @@ export function StaffConversation({ orderId, messages: initialMessages, canReply
     return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", onVisibility); };
   }, [refreshMessages]);
 
-  async function sendReply() {
-    setBusy(true);
+  async function sendReply(action: "message" | "clarify") {
+    setBusyAction(action);
     setError(null);
     try {
-      const response = await fetch(`/api/staff/support/orders/${orderId}/review`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "clarify", message: reply }) });
+      const response = await fetch(`/api/staff/support/orders/${orderId}/review`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, message: reply }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "The message could not be sent.");
       setReply("");
@@ -42,7 +42,7 @@ export function StaffConversation({ orderId, messages: initialMessages, canReply
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The message could not be sent.");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
 
@@ -67,7 +67,13 @@ export function StaffConversation({ orderId, messages: initialMessages, canReply
     <div className="mt-4 rounded-2xl border border-black/10 p-4">
       <label htmlFor="staff-chat-reply" className="text-sm font-semibold">Message customer</label>
       <textarea id="staff-chat-reply" value={reply} onChange={(event) => setReply(event.target.value)} rows={3} disabled={!canReply} placeholder="Ask a question or send an update" className="mt-2 w-full resize-none rounded-xl border border-black/15 p-3 text-sm outline-none focus:border-[var(--green-strong)] disabled:bg-black/[0.03]" />
-      <div className="mt-3 flex items-center justify-between gap-4"><p className="text-xs text-black/40">The customer can reply from their update page.</p><button type="button" onClick={sendReply} disabled={busy || !canReply || reply.trim().length < 5} className="h-10 shrink-0 cursor-pointer rounded-xl bg-black px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">{busy ? "Sending…" : "Send message"}</button></div>
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-black/40">Send an update normally. Choose “Ask for reply” only when work must wait for the customer.</p>
+        <div className="flex shrink-0 gap-2">
+          <button type="button" onClick={() => sendReply("message")} disabled={busyAction !== null || !canReply || reply.trim().length < 5} className="h-10 cursor-pointer rounded-xl border border-black/15 px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-35">{busyAction === "message" ? "Sending…" : "Send update"}</button>
+          <button type="button" onClick={() => sendReply("clarify")} disabled={busyAction !== null || !canReply || reply.trim().length < 5} className="h-10 cursor-pointer rounded-xl bg-black px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">{busyAction === "clarify" ? "Sending…" : "Ask for reply"}</button>
+        </div>
+      </div>
       {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
     </div>
   </section>;

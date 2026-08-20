@@ -7,6 +7,7 @@ import { maskPii } from "@/security/pii";
 import { StaffShell } from "../../staff-shell";
 import { SupportOrderActions } from "./support-order-actions";
 import { StaffConversation } from "./staff-conversation";
+import { PiiField } from "@/components/pii-field";
 
 export const dynamic = "force-dynamic";
 
@@ -49,12 +50,15 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
                 <div className="flex gap-2"><Badge>{order.status.replaceAll("_", " ")}</Badge><Badge>{order.reviewState.replaceAll("_", " ")}</Badge></div>
               </div>
               <dl className="mt-7 grid gap-5 border-t border-black/10 pt-6 sm:grid-cols-2">
-                <Data label="Customer">{order.customer.emails[0] ? maskPii("parent_email", order.customer.emails[0].email) : "No email"}</Data>
+                <Data label="Customer"><PiiField orderId={order.id} field="parent_email" masked={order.customer.emails[0] ? maskPii("parent_email", order.customer.emails[0].email) : "No email"} /></Data>
                 <Data label="Communication ticket">{order.communicationTicketId ?? "Not created"}</Data>
                 <Data label="Device">{order.returnedDevice?.model.name ?? "Unidentified"}</Data>
                 <Data label="Serial">{order.returnedDeviceSerial ?? "Not known"}</Data>
                 <Data label="Replacement path">{order.processType?.name ?? "Not selected"}</Data>
                 <Data label="Amount captured">${(order.amountPaidInCents / 100).toFixed(2)}</Data>
+                <Data label="Payment reference"><PiiField orderId={order.id} field="payment_reference" masked={order.paymentReference ? maskPii("payment_reference", order.paymentReference) : "Not available"} /></Data>
+                <Data label="Shipping address"><PiiField orderId={order.id} field="parent_address" masked={order.encryptedShippingAddress ? "••••••••" : "Not available"} /></Data>
+                <Data label="Customer outcome">{order.resolution?.replaceAll("_", " ") ?? "Not decided"}</Data>
               </dl>
             </section>
 
@@ -79,6 +83,7 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
 
           <aside>
             <SupportOrderActions
+              key={`${order.id}-${order.reviewState}-${order.resolution ?? "none"}`}
               orderId={order.id}
               workItem={activeItem ? { id: activeItem.id, status: activeItem.status, assignedToStaffId: activeItem.assignedToStaffId, assignedToName: activeItem.assignedToStaff?.displayName ?? null } : null}
               staffId={staff.id}
@@ -87,6 +92,7 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
               reviewState={order.reviewState}
               initialFault={order.customerFaultText ?? ""}
               coverage={coverage}
+              resolution={order.resolution}
               requiresFreeReason={Boolean(order.processType && order.processType.feeInCents === 0)}
               refundableDepositInCents={Math.max(0, Math.min(order.processType?.depositInCents ?? 0, order.amountPaidInCents) - order.depositRefundedInCents)}
               refundEligible={["return_in_transit", "return_received"].includes(order.status)}

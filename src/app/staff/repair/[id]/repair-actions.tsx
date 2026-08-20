@@ -18,6 +18,7 @@ export function RepairActions({ id, status }: { id: string; status: string }) {
   const [resolution, setResolution] = useState("");
   const [notes, setNotes] = useState("");
   const [disposition, setDisposition] = useState("scrap");
+  const [terminalSubDisposition, setTerminalSubDisposition] = useState("");
   const [reason, setReason] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -57,8 +58,9 @@ export function RepairActions({ id, status }: { id: string; status: string }) {
     <section className="rounded-[1.5rem] border border-red-200 bg-white p-6">
       <h2 className="font-semibold">Terminal failure</h2>
       <select value={disposition} onChange={(event) => setDisposition(event.target.value)} className="mt-3 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm"><option value="scrap">Scrap</option><option value="parts_harvest">Parts harvest</option><option value="beyond_economic_repair">Beyond economic repair</option></select>
+      {disposition === "beyond_economic_repair" ? <><label className="mt-3 block text-sm font-semibold">Why is repair not economical?</label><select value={terminalSubDisposition} onChange={(event) => setTerminalSubDisposition(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm"><option value="">Choose a reason</option><option value="water_damage">Water damage</option><option value="destroyed">Device destroyed</option></select></> : null}
       <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={3} placeholder="Required reason" className="mt-3 w-full rounded-xl border border-black/15 p-3 text-sm" />
-      <button onClick={() => update({ action: "terminal", disposition, reason })} disabled={busy || reason.trim().length < 3} className="mt-3 h-10 w-full rounded-xl border border-red-300 text-sm font-semibold text-red-700 disabled:opacity-35">Retire unit</button>
+      <button onClick={() => update({ action: "terminal", disposition, terminalSubDisposition: terminalSubDisposition || undefined, reason })} disabled={busy || reason.trim().length < 3 || (disposition === "beyond_economic_repair" && !terminalSubDisposition)} className="mt-3 h-10 w-full rounded-xl border border-red-300 text-sm font-semibold text-red-700 disabled:opacity-35">Retire unit</button>
     </section>
     {error ? <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
   </div>;

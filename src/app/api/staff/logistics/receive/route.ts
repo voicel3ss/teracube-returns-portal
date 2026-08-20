@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     if (shipment.replacementOrderId) {
       const discrepancy = result === "mismatch" || result === "missing";
       const outboundDelivered = shipment.replacementOrder?.shipments.some((item) => item.type === "outbound" && item.status === "delivered") ?? false;
-      await tx.replacementOrder.update({ where: { id: shipment.replacementOrderId }, data: { status: discrepancy ? "return_discrepancy" : outboundDelivered ? "closed" : "return_received", ...(result === "unidentified" && observedSerial ? { returnedDeviceSerial: observedSerial } : {}) } });
+      await tx.replacementOrder.update({ where: { id: shipment.replacementOrderId }, data: { status: discrepancy ? "return_discrepancy" : outboundDelivered ? "closed" : "return_received", ...(discrepancy ? { resolution: "exception" } : {}), ...(result === "unidentified" && observedSerial ? { returnedDeviceSerial: observedSerial } : {}) } });
       if (discrepancy) await tx.workItem.upsert({ where: { replacementOrderId_kind: { replacementOrderId: shipment.replacementOrderId, kind: "return_discrepancy" } }, update: { status: "open", lastActivityAt: new Date() }, create: { replacementOrderId: shipment.replacementOrderId, team: "support", kind: "return_discrepancy" } });
     }
     await tx.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "shipment.inbound_received", entityType: "shipment", entityId: shipment.id, metadata: { result, observedSerial, contentsPresent: parsed.data.contentsPresent } } });

@@ -89,7 +89,8 @@ export class MockCommerceProvider implements CommerceProvider {
     return { refundReference: `mock-refund-${crypto.randomUUID()}` };
   }
 
-  async dispatchReplacement() {
+  async dispatchReplacement(_input: { orderId: string; modelId: string; suppressCustomerEmail: true }): Promise<{ fulfillmentReference: string; trackingNumber?: string }> {
+    void _input;
     return { fulfillmentReference: `mock-fulfillment-${crypto.randomUUID()}` };
   }
 }

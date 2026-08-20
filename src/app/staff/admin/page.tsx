@@ -5,6 +5,7 @@ import { prisma } from "@/db/prisma";
 import { StaffShell } from "../support/staff-shell";
 import { AdminConfigForm } from "./admin-config-form";
 import { StaffAccountsForm } from "./staff-accounts-form";
+import { resolveCustomerTrackingCopy } from "@/domain/customer-tracking-copy";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export default async function AdminPage() {
       <h1 className="mt-1 text-3xl font-semibold tracking-[-.035em]">Repair and replacement settings</h1>
       <p className="mt-2 text-black/50">Control customer options, charges, reminders, staff access, and return instructions.</p>
       <div className="mt-7 grid gap-7 xl:grid-cols-[1fr_.42fr]">
-        <AdminConfigForm config={config} processTypes={processTypes} />
+        <AdminConfigForm config={{ ...config, customerTrackingCopy: resolveCustomerTrackingCopy(config.customerTrackingCopy) }} processTypes={processTypes} />
         <StaffAccountsForm accounts={accounts} currentStaffId={staff.id} />
       </div>
     </div>

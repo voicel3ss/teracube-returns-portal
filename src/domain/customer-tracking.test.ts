@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getCustomerTrackingView } from "./customer-tracking";
+import { customerTrackingCopyDefaults } from "./customer-tracking-copy";
 
 describe("customer tracking presentation", () => {
   it("uses plain-language verification copy", () => {
@@ -33,5 +34,19 @@ describe("shipment-aware customer tracking", () => {
     const view = getCustomerTrackingView("return_discrepancy", "advance", { inboundStatus: "received", outboundStatus: "in_transit" });
     expect(view.returnStatus).toBe("Needs review");
     expect(view.tone).toBe("attention");
+  });
+
+  it("shows a reviewed request as released before either shipment moves", () => {
+    expect(getCustomerTrackingView("awaiting_verification", "regular", { inboundStatus: "label_ready" }, "reviewed")).toMatchObject({
+      headline: "Your request is verified",
+      activeMilestone: 3,
+      returnStatus: "Label ready",
+      replacementStatus: "Waiting for your return",
+    });
+  });
+
+  it("uses admin-configured customer copy", () => {
+    const view = getCustomerTrackingView("closed", "advance", undefined, undefined, { ...customerTrackingCopyDefaults, closedHeadline: "All done" });
+    expect(view.headline).toBe("All done");
   });
 });

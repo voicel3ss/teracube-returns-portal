@@ -96,6 +96,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
   const [result, setResult] = useState<{ orderNumber: number; trackingUrl: string } | null>(null);
   const [activeRequest, setActiveRequest] = useState<{ orderNumber: number; trackingUrl: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [validatingAddress, setValidatingAddress] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const appEntryLoaded = useRef(false);
 
@@ -274,6 +275,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
 
   async function validateAddress() {
     setBusy(true);
+    setValidatingAddress(true);
     setError(null);
     try {
       const response = await fetch("/api/repair/address/validate", {
@@ -291,6 +293,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
       setError(caught instanceof Error ? caught.message : "We couldn't validate that address.");
     } finally {
       setBusy(false);
+      setValidatingAddress(false);
     }
   }
 
@@ -731,7 +734,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
               disabled={busy || Object.entries(address).some(([key, value]) => key !== "line2" && !value.trim())}
               className="mt-5 h-11 w-full rounded-xl border border-black/15 text-sm font-semibold hover:border-black/35 disabled:opacity-35"
             >
-              {addressValidationToken ? "✓ Address validated" : busy ? "Checking address…" : "Validate shipping address"}
+              {addressValidationToken ? "✓ Address validated" : validatingAddress ? "Checking address…" : "Validate shipping address"}
             </button>
             {addressValidationToken ? (
               <p className="mt-3 text-sm font-medium text-emerald-700">Validated and standardized for delivery.</p>
@@ -747,7 +750,7 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
               disabled={busy || !emailVerificationToken || !addressValidationToken}
               className="mt-7 h-12 w-full rounded-xl bg-black font-semibold text-white hover:bg-black/80 disabled:opacity-35"
             >
-              {busy ? "Completing request…" : selectedOption.totalInCents === 0 ? "Confirm $0 order" : `Simulate payment of ${money(selectedOption.totalInCents)}`}
+              {busy && !validatingAddress ? "Completing request…" : selectedOption.totalInCents === 0 ? "Confirm $0 order" : `Simulate payment of ${money(selectedOption.totalInCents)}`}
             </button>
           </form>
         ) : null}

@@ -16,19 +16,20 @@ export default async function LogisticsPage() {
     redirect("/staff/login");
   }
 
-  const [orders, stock, transfers, expectedInbound, recent] = await Promise.all([
-    prisma.replacementOrder.findMany({ where: { reviewState: "reviewed", outboundDeviceSerial: null, OR: [
+  const [orders, stock, transfers, expectedInbound, pendingOutbound, recent] = await Promise.all([
+    prisma.replacementOrder.findMany({ where: { reviewState: "reviewed", shipments: { none: { type: "outbound", status: { not: "exception" } } }, OR: [
       { processType: { flow: "advance" }, status: { in: ["awaiting_verification", "return_in_transit", "return_received"] } },
       { processType: { flow: "regular" }, status: { in: ["return_in_transit", "return_received"] } },
-    ] }, include: { processType: true, returnedDevice: { include: { model: true } } }, orderBy: { updatedAt: "asc" }, take: 50 }),
-    prisma.device.findMany({ where: { circulationState: "in_stock", grade: "refurbished" }, include: { model: true }, orderBy: { updatedAt: "asc" }, take: 100 }),
-    prisma.shipment.findMany({ where: { type: "internal_transfer", status: { in: ["created", "label_ready", "in_transit"] } }, include: { units: true }, orderBy: { createdAt: "desc" }, take: 50 }),
+    ] }, include: { processType: true, customer: { include: { _count: { select: { orders: true } } } }, returnedDevice: { include: { model: true, repairs: { orderBy: { createdAt: "desc" }, take: 5 } } } }, orderBy: { updatedAt: "asc" }, take: 50 }),
+    prisma.device.findMany({ where: { circulationState: "in_stock" }, include: { model: true }, orderBy: { updatedAt: "asc" }, take: 100 }),
+    prisma.shipment.findMany({ where: { type: "internal_transfer", status: { in: ["created", "label_ready", "in_transit", "exception"] } }, include: { units: true }, orderBy: { createdAt: "desc" }, take: 50 }),
     prisma.shipment.findMany({
       where: { type: "inbound", status: { in: ["label_ready", "in_transit", "delivered", "received"] } },
       include: { replacementOrder: { include: { returnedDevice: { include: { model: true } } } }, units: true },
       orderBy: { updatedAt: "desc" },
       take: 50,
     }),
+    prisma.shipment.findMany({ where: { type: "outbound", status: "created" }, include: { replacementOrder: { include: { returnedDevice: { include: { model: true } } } } }, orderBy: { createdAt: "asc" }, take: 50 }),
     prisma.shipment.findMany({ where: { status: { in: ["received", "in_transit", "label_ready"] } }, include: { replacementOrder: true, units: true }, orderBy: { updatedAt: "desc" }, take: 12 }),
   ]);
 
@@ -49,7 +50,7 @@ export default async function LogisticsPage() {
           observedSerials: shipment.units.filter((unit) => unit.observed).map((unit) => unit.deviceSerial),
         }))} />
 
-        <div className="mt-7"><LogisticsWorkspace orders={orders.map((order) => ({ id: order.id, orderNumber: order.orderNumber, model: order.returnedDevice?.model.name ?? "Unidentified model", flow: order.processType?.flow ?? "regular", status: order.status }))} stock={stock.map((device) => ({ serial: device.serial, model: device.model.name }))} transfers={transfers.map((shipment) => ({ id: shipment.id, status: shipment.status, serials: shipment.units.map((unit) => unit.deviceSerial), labelFilename: shipment.labelFilename }))} /></div>
+        <div className="mt-7"><LogisticsWorkspace orders={orders.map((order) => ({ id: order.id, orderNumber: order.orderNumber, model: order.returnedDevice?.model.name ?? "Unidentified model", flow: order.processType?.flow ?? "regular", status: order.status, customerSince: order.customer.createdAt.toISOString(), priorOrderCount: Math.max(0, order.customer._count.orders - 1), returnedSerial: order.returnedDeviceSerial, repairHistory: order.returnedDevice?.repairs.map((repair) => ({ status: repair.status, resolution: repair.repairTeamResolution ?? repair.terminalReason })) ?? [] }))} stock={stock.map((device) => ({ serial: device.serial, model: device.model.name, grade: device.grade }))} transfers={transfers.map((shipment) => ({ id: shipment.id, status: shipment.status, serials: shipment.units.map((unit) => unit.deviceSerial), observedSerials: readObservedSerials(shipment.contentsNotes, shipment.units.filter((unit) => unit.observed).map((unit) => unit.deviceSerial)), labelFilename: shipment.labelFilename }))} pendingOutbound={pendingOutbound.map((shipment) => ({ id: shipment.id, orderNumber: shipment.replacementOrder?.orderNumber ?? 0, model: shipment.replacementOrder?.returnedDevice?.model.name ?? "Unknown model" }))} /></div>
 
         <section className="mt-7 rounded-[1.5rem] border border-black/10 bg-white p-6 sm:p-8">
           <div className="flex items-center justify-between"><h2 className="font-semibold">Recent handoffs</h2><span className="text-sm text-black/40">{recent.length} shipments</span></div>
@@ -61,6 +62,14 @@ export default async function LogisticsPage() {
       </div>
     </StaffShell>
   );
+}
+
+function readObservedSerials(contentsNotes: string | null, fallback: string[]) {
+  if (!contentsNotes) return fallback;
+  try {
+    const value = JSON.parse(contentsNotes) as { observedSerials?: unknown };
+    return Array.isArray(value.observedSerials) ? value.observedSerials.filter((item): item is string => typeof item === "string") : fallback;
+  } catch { return fallback; }
 }
 
 type ExpectedShipment = { id: string; tracking: string | null; status: string; orderNumber: number | null; expectedSerial: string | null; model: string; observedSerials: string[] };

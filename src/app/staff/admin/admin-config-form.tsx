@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { CustomerTrackingCopy } from "@/domain/customer-tracking-copy";
 
 type Config = {
   approvalMode: string;
@@ -11,7 +12,33 @@ type Config = {
   unidentifiedEscalationDays: number;
   stuckRepairDays: number;
   returnInstructions: string;
+  customerTrackingCopy: CustomerTrackingCopy;
 };
+
+const trackingCopyFields: Array<{ key: keyof CustomerTrackingCopy; label: string }> = [
+  { key: "unidentifiedHeadline", label: "Unidentified device headline" },
+  { key: "unidentifiedDetail", label: "Unidentified device detail" },
+  { key: "discrepancyHeadline", label: "Return discrepancy headline" },
+  { key: "discrepancyDetail", label: "Return discrepancy detail" },
+  { key: "blockedHeadline", label: "Fulfillment delay headline" },
+  { key: "blockedDetail", label: "Fulfillment delay detail" },
+  { key: "closedHeadline", label: "Completed request headline" },
+  { key: "closedDetail", label: "Completed request detail" },
+  { key: "dispatchedHeadline", label: "Replacement dispatched headline" },
+  { key: "dispatchedDetail", label: "Replacement dispatched detail" },
+  { key: "deliveredHeadline", label: "Replacement delivered headline" },
+  { key: "deliveredDetail", label: "Replacement delivered detail" },
+  { key: "returnTransitHeadline", label: "Return in transit headline" },
+  { key: "returnTransitDetail", label: "Return in transit detail" },
+  { key: "returnTransitRegularDetail", label: "Regular return in transit detail" },
+  { key: "verifiedHeadline", label: "Verified headline" },
+  { key: "verifiedAdvanceDetail", label: "Verified advance-replacement detail" },
+  { key: "verifiedRegularDetail", label: "Verified regular-replacement detail" },
+  { key: "returnReceivedHeadline", label: "Return received headline" },
+  { key: "returnReceivedDetail", label: "Return received detail" },
+  { key: "verificationHeadline", label: "Verification headline" },
+  { key: "verificationDetail", label: "Verification detail" },
+];
 
 type Process = {
   id: string;
@@ -49,8 +76,9 @@ export function AdminConfigForm({ config: initial, processTypes: initialProcesse
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...config, processTypes }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      const responseText = await response.text();
+      const data = responseText ? JSON.parse(responseText) : {};
+      if (!response.ok) throw new Error(data.error ?? "The settings could not be saved. Check the server log and try again.");
       setNotice("Settings saved. New workflow actions will use these values.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not save settings.");
@@ -119,6 +147,16 @@ export function AdminConfigForm({ config: initial, processTypes: initialProcesse
             </summary>
             <div className="border-t border-black/10 bg-white px-5 py-5">
               <label className="block text-sm font-semibold">Instructions<textarea rows={3} value={config.returnInstructions} onChange={(event) => setConfig({ ...config, returnInstructions: event.target.value })} className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm font-normal" /></label>
+            </div>
+          </details>
+
+          <details className="group rounded-2xl border border-black/10 bg-black/[.015]">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden">
+              <div><p className="font-semibold">Customer tracking messages</p><p className="mt-1 text-sm text-black/50">Headlines and explanations shown on the secure request-status page</p></div>
+              <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rotate-45 border-b-2 border-r-2 border-black/50 transition-transform group-open:-rotate-[135deg]" />
+            </summary>
+            <div className="grid gap-4 border-t border-black/10 bg-white px-5 py-5 sm:grid-cols-2">
+              {trackingCopyFields.map((field) => <label key={field.key} className="block text-xs font-semibold">{field.label}<textarea rows={2} value={config.customerTrackingCopy[field.key]} onChange={(event) => setConfig({ ...config, customerTrackingCopy: { ...config.customerTrackingCopy, [field.key]: event.target.value } })} className="mt-1.5 w-full rounded-lg border border-black/15 p-3 text-sm font-normal" /></label>)}
             </div>
           </details>
         </div>
