@@ -2,7 +2,7 @@
 
 ## Entry paths
 
-- Public self-service: `/repair/start`
+- Public self-service: `/repair/start`, with `/repair/start?lookup=phone` opening directly in child-phone lookup mode
 - Parent-app deep link: a short-lived server-signed `entry` token containing the parent email and device serial
 - Staff-created secure intake link: generated from the Support queue and valid for seven days
 
@@ -16,7 +16,7 @@
 | Teracube 4 | `202402TC4009418` | `(206) 555-0164` |
 | Teracube 2e | `202403T2E236105` | `(206) 555-0185` |
 
-Any unrecognized serial or phone follows the unidentified-device support path.
+Any unrecognized serial or phone follows the unidentified-device support path. The attempted identifier is carried into the Support-only conversation, and the parent can include up to three photos with the initial description so Support does not have to ask for the same evidence again.
 
 The sample device records intentionally do not prefill a reserved `example.com` address. The parent must enter an inbox they can access and complete email verification.
 
@@ -32,13 +32,13 @@ The sample device records intentionally do not prefill a reserved `example.com` 
 
 1. Resolve the device through the mock Thrive provider and plan through the mock Gigs provider.
 2. Confirm derived model, serial, manufacture month, masked ICCID, and plan state.
-3. Capture structured and free-text customer-reported fault.
+3. Capture structured and free-text customer-reported fault, with up to three optional photos.
 4. Infer the initial warranty/accident path from the report; CS remains authoritative at verification.
 5. Show only process types configured for the model. Pricing appears only after the parent selects advance or regular.
 6. Repeat the explicit promise that the customer receives a different refurbished unit.
 7. Verify the contact inbox, validate and standardize the shipping address, then run a mock Shopify checkout. No card data is requested. The validated address is encrypted before PostgreSQL persistence.
 8. Create an order-scoped 30-day tracking token and secure on-site conversation. A configured helpdesk adapter may mirror the order for internal records, but email is not required for parent replies.
-9. Hold the order at `awaiting_verification` until the CS milestone releases it.
+9. Hold the order at `awaiting_verification` until the Support milestone releases it. If Support identifies a previously unknown device, collect and validate any missing shipping address on the secure tracking page before release.
 10. Show plain-language tracking for the return and replacement as separate physical legs, provide the printable return label, and update the conversation automatically while the page is open.
 
 ## Mock pricing

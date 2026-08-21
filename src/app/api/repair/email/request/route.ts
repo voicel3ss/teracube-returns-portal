@@ -10,7 +10,7 @@ import { deliverVerificationCode, emailDeliveryConfigured } from "@/integrations
 const schema = z.object({ email: customerEmailSchema });
 
 export async function POST(request: Request) {
-  const parsed = schema.safeParse(await request.json());
+  const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0]?.message ?? "Enter a valid email." }, { status: 400 });
   }

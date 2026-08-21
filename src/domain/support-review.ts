@@ -4,9 +4,6 @@ export function validateClaimReview(input: {
   feeInCents: number;
   freeOutcomeReason?: string;
 }): string | null {
-  if (input.feeInCents === 0 && !input.freeOutcomeReason?.trim()) {
-    return "An internal reason is required for every free outcome.";
-  }
   if (input.confirmedCoverage === "accident" && input.feeInCents === 0) {
     const reason = input.freeOutcomeReason?.trim() ?? "";
     const hasProtectionPlan = reason === "Accidental-damage protection plan";
@@ -26,6 +23,7 @@ export function validateClaimReview(input: {
 
 export function validateDepositRefund(input: {
   status: string;
+  inboundShipmentStatuses?: string[];
   amountInCents: number;
   depositInCents: number;
   alreadyRefundedInCents: number;
@@ -36,7 +34,11 @@ export function validateDepositRefund(input: {
     0,
     Math.min(input.depositInCents, input.amountPaidInCents) - input.alreadyRefundedInCents,
   );
-  const eligible = input.refundGate === "return_received" ? input.status === "return_received" : ["return_in_transit", "return_received"].includes(input.status);
+  const eligible = isDepositRefundEligible({
+    orderStatus: input.status,
+    inboundShipmentStatuses: input.inboundShipmentStatuses,
+    refundGate: input.refundGate,
+  });
   if (!eligible) {
     return { refundableInCents, error: input.refundGate === "return_received" ? "The return must be received before its deposit can be refunded." : "The return must be in transit or received before its deposit can be refunded." };
   }
@@ -47,4 +49,17 @@ export function validateDepositRefund(input: {
     return { refundableInCents, error: "The refund cannot exceed the remaining captured deposit." };
   }
   return { refundableInCents, error: null };
+}
+
+export function isDepositRefundEligible(input: {
+  orderStatus: string;
+  inboundShipmentStatuses?: string[];
+  refundGate?: "return_in_transit" | "return_received";
+}) {
+  const shipmentStatuses = input.inboundShipmentStatuses ?? [];
+  if (input.refundGate === "return_received") {
+    return ["return_received", "closed"].includes(input.orderStatus) || shipmentStatuses.includes("received");
+  }
+  return ["return_in_transit", "return_received", "closed"].includes(input.orderStatus)
+    || shipmentStatuses.some((status) => ["in_transit", "delivered", "received"].includes(status));
 }

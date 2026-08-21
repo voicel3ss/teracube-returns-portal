@@ -6,7 +6,7 @@ import { postalAddressSchema } from "@/verification/schemas";
 const schema = z.object({ address: postalAddressSchema });
 
 export async function POST(request: Request) {
-  const parsed = schema.safeParse(await request.json());
+  const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0]?.message ?? "Enter a complete US address." }, { status: 400 });
   }

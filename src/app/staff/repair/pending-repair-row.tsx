@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { readJsonResponse } from "@/lib/read-json-response";
 
 export function PendingRepairRow({ serial, model, orderNumber }: { serial: string; model: string; orderNumber: number | null }) {
   const router = useRouter();
@@ -13,7 +14,7 @@ export function PendingRepairRow({ serial, model, orderNumber }: { serial: strin
     setError(null);
     try {
       const response = await fetch("/api/staff/repair/receive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ serial }) });
-      const data = await response.json();
+      const data = await readJsonResponse<{ error?: string; repairId: string }>(response);
       if (!response.ok) throw new Error(data.error ?? "Repair could not be started.");
       router.push(`/staff/repair/${data.repairId}`);
     } catch (caught) {

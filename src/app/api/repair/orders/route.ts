@@ -6,8 +6,10 @@ import { prisma } from "@/db/prisma";
 import { inferCoverage } from "@/domain/repair-intake";
 import { parseTeracubeSerial } from "@/domain/serial-number";
 import { mockCommerceProvider, mockHelpdeskProvider } from "@/integrations/mocks/device-care";
+import { decodePhotoUploads, PhotoUploadError } from "@/lib/photo-upload";
 import { PiiCipher } from "@/security/pii-cipher";
 import { consolidateCustomerForDevice } from "@/server/customers";
+import { orderSubmittedMessage } from "@/domain/customer-notifications";
 import {
   canonicalAddress,
   normalizeEmail,
@@ -45,8 +47,10 @@ const orderSchema = z.object({
   photos: z.array(photoSchema).max(3).default([]),
 });
 
+class ActiveOrderConflictError extends Error {}
+
 export async function POST(request: Request) {
-  const parsed = orderSchema.safeParse(await request.json());
+  const parsed = orderSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid order details." }, { status: 400 });
   }
@@ -129,36 +133,48 @@ export async function POST(request: Request) {
     );
   }
 
+  let attachments;
+  try {
+    attachments = decodePhotoUploads(parsed.data.photos);
+  } catch (error) {
+    if (error instanceof PhotoUploadError) return Response.json({ error: error.message }, { status: 400 });
+    throw error;
+  }
+
   const orderId = randomUUID();
-  const checkout = await mockCommerceProvider.createCheckout({
-    orderId,
-    fee: { amountInCents: processType.feeInCents, currency: "USD" },
-    deposit: { amountInCents: processType.depositInCents, currency: "USD" },
-    customerEmail: normalizedEmail,
-  });
-  const ticket = await mockHelpdeskProvider.createOrderTicket({
-    orderId,
-    customerEmail: normalizedEmail,
-    subject: "Teracube replacement request",
-  });
   const cipher = new PiiCipher(encryptionKey);
   const encryptedAddress = cipher.encrypt(JSON.stringify(parsed.data.shippingAddress));
 
-  const order = await prisma.$transaction(async (transaction) => {
-    await transaction.device.upsert({
-      where: { serial: serialResult.value.serial },
-      update: { modelId: parsed.data.modelId, currentOwnerId: customer.id },
-      create: {
-        serial: serialResult.value.serial,
-        modelId: parsed.data.modelId,
-        currentOwnerId: customer.id,
-        grade: "new",
-        circulationState: "deployed",
-      },
-    });
+  let order;
+  try {
+    order = await prisma.$transaction(async (transaction) => {
+      await transaction.device.upsert({
+        where: { serial: serialResult.value.serial },
+        update: { modelId: parsed.data.modelId, currentOwnerId: customer.id },
+        create: {
+          serial: serialResult.value.serial,
+          modelId: parsed.data.modelId,
+          currentOwnerId: customer.id,
+          grade: "new",
+          circulationState: "deployed",
+        },
+      });
+      const concurrentOrder = await transaction.replacementOrder.findFirst({ where: { returnedDeviceSerial: serialResult.value.serial, status: { not: "closed" } }, select: { id: true } });
+      if (concurrentOrder) throw new ActiveOrderConflictError();
+      const checkout = await mockCommerceProvider.createCheckout({
+        orderId,
+        fee: { amountInCents: processType.feeInCents, currency: "USD" },
+        deposit: { amountInCents: processType.depositInCents, currency: "USD" },
+        customerEmail: normalizedEmail,
+      });
+      const ticket = await mockHelpdeskProvider.createOrderTicket({
+        orderId,
+        customerEmail: normalizedEmail,
+        subject: "Teracube replacement request",
+      });
 
-    const created = await transaction.replacementOrder.create({
-      data: {
+      const created = await transaction.replacementOrder.create({
+        data: {
         id: orderId,
         customerId: customer.id,
         processTypeId: processType.id,
@@ -171,35 +187,39 @@ export async function POST(request: Request) {
         communicationTicketId: ticket.ticketId,
         paymentReference: checkout.checkoutId,
         amountPaidInCents: processType.feeInCents + processType.depositInCents,
+        quotedFeeInCents: processType.feeInCents,
+        quotedDepositInCents: processType.depositInCents,
         encryptedShippingAddress: encryptedAddress,
         submittedAt: new Date(),
-      },
-    });
+        },
+      });
 
-    await transaction.workItem.create({
+      await transaction.workItem.create({
       data: {
         replacementOrderId: created.id,
         team: "support",
         kind: "claim_verification",
       },
-    });
+      });
 
-    await transaction.conversationMessage.create({
+      await transaction.conversationMessage.create({
       data: {
         replacementOrderId: created.id,
         senderKind: "customer",
         body: parsed.data.faultText,
-        attachments: {
-          create: parsed.data.photos.map((photo) => {
-            const data = Buffer.from(photo.data, "base64");
-            if (data.byteLength > 5_000_000) throw new Error("Each photo must be 5 MB or smaller.");
-            return { filename: photo.name, contentType: photo.type, byteSize: data.byteLength, data };
-          }),
-        },
+        attachments: { create: attachments },
       },
-    });
+      });
 
-    await transaction.auditEvent.create({
+      await transaction.conversationMessage.create({
+        data: {
+          replacementOrderId: created.id,
+          senderKind: "system",
+          body: orderSubmittedMessage(processType.feeInCents + processType.depositInCents),
+        },
+      });
+
+      await transaction.auditEvent.create({
       data: {
         actorKind: "customer",
         action: "replacement_order.submitted",
@@ -213,12 +233,19 @@ export async function POST(request: Request) {
           addressValidated: true,
         },
       },
+      });
+      return { ...created, customerId: customer.id, communicationTicketId: ticket.ticketId };
     });
-    return { ...created, customerId: customer.id };
-  });
+  } catch (error) {
+    if (!(error instanceof ActiveOrderConflictError)) throw error;
+    const concurrentOrder = await prisma.replacementOrder.findFirst({ where: { returnedDeviceSerial: serialResult.value.serial, status: { not: "closed" } }, orderBy: { createdAt: "desc" } });
+    if (!concurrentOrder) return Response.json({ error: "Another request changed this device. Please try again." }, { status: 409 });
+    const access = await new CustomerTokenService(new PrismaCustomerTokenRepository(prisma)).issue({ customerId: customer.id, replacementOrderId: concurrentOrder.id });
+    return Response.json({ code: "ACTIVE_REQUEST_EXISTS", error: `A replacement request is already in progress for this device (order #${String(concurrentOrder.orderNumber).padStart(4, "0")}).`, orderNumber: concurrentOrder.orderNumber, trackingUrl: `/repair/track?token=${encodeURIComponent(access.token)}` }, { status: 409 });
+  }
 
   await mockHelpdeskProvider.reply({
-    ticketId: ticket.ticketId,
+    ticketId: order.communicationTicketId!,
     body: `We received Teracube replacement order #${order.orderNumber}.`,
   });
 

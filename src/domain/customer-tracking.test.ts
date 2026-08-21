@@ -30,6 +30,14 @@ describe("shipment-aware customer tracking", () => {
     expect(view.replacementStatus).toBe("In transit");
   });
 
+  it("does not let stale shipment data move an order backward", () => {
+    expect(getCustomerTrackingView("return_received", "regular", { inboundStatus: "label_ready", outboundStatus: "in_transit" })).toMatchObject({
+      returnStatus: "Received",
+      replacementStatus: "In transit",
+    });
+    expect(getCustomerTrackingView("refurb_delivered", "advance", { outboundStatus: "label_ready" }).replacementStatus).toBe("Delivered");
+  });
+
   it("does not hide a return discrepancy behind shipment progress", () => {
     const view = getCustomerTrackingView("return_discrepancy", "advance", { inboundStatus: "received", outboundStatus: "in_transit" });
     expect(view.returnStatus).toBe("Needs review");

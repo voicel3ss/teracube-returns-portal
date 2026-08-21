@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { readJsonResponse } from "@/lib/read-json-response";
 
-type WorkItem = { id: string; status: string; assignedToStaffId: string | null; assignedToName: string | null };
+type WorkItem = { id: string; status: string; assignedToStaffId: string | null; assignedToName: string | null; snoozedUntil: string | null };
 
-export function SupportOrderActions({ orderId, workItem, staffId, canAssign, assignableStaff, reviewState, initialFault, coverage, resolution: initialResolution, requiresFreeReason, refundableDepositInCents, refundEligible }: {
+export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, canAssign, assignableStaff, reviewState, initialFault, coverage, resolution: initialResolution, requiresFreeReason, refundableDepositInCents, refundEligible, refundGate, refundOwnedByMe }: {
   orderId: string;
+  orderStatus: string;
   workItem: WorkItem | null;
   staffId: string;
   canAssign: boolean;
@@ -18,17 +20,22 @@ export function SupportOrderActions({ orderId, workItem, staffId, canAssign, ass
   requiresFreeReason: boolean;
   refundableDepositInCents: number;
   refundEligible: boolean;
+  refundGate: "return_in_transit" | "return_received";
+  refundOwnedByMe: boolean;
 }) {
   const router = useRouter();
   const [fault, setFault] = useState(initialFault);
   const [confirmedCoverage, setConfirmedCoverage] = useState(coverage);
+  const [identifySerial, setIdentifySerial] = useState("");
+  const [identifyCoverage, setIdentifyCoverage] = useState<"warranty" | "accident">("warranty");
+  const [identifyFlow, setIdentifyFlow] = useState<"regular" | "advance">("regular");
   const [freeReason, setFreeReason] = useState("");
   const [accidentalFreeBasis, setAccidentalFreeBasis] = useState<"" | "paid" | "plan" | "courtesy">("");
   const [pauseNote, setPauseNote] = useState("");
   const [note, setNote] = useState("");
   const [assigneeId, setAssigneeId] = useState(workItem?.assignedToStaffId ?? "");
   const [refundDollars, setRefundDollars] = useState((refundableDepositInCents / 100).toFixed(2));
-  const [resolution, setResolution] = useState(initialResolution ?? "");
+  const [resolution, setResolution] = useState(orderStatus === "return_discrepancy" && initialResolution === "exception" ? "" : initialResolution ?? "");
   const [customerLink, setCustomerLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,16 +47,17 @@ export function SupportOrderActions({ orderId, workItem, staffId, canAssign, ass
       : accidentalFreeBasis === "courtesy"
         ? `Courtesy exception: ${freeReason.trim()}`
         : ""
-    : freeReason.trim();
-  const freeReasonComplete = !requiresFreeReason || (accidentalFreeOutcome
-    ? accidentalFreeBasis === "paid" || accidentalFreeBasis === "plan" || (accidentalFreeBasis === "courtesy" && freeReason.trim().length >= 3)
-    : freeReason.trim().length >= 3);
+    : "";
+  const freeReasonComplete = !accidentalFreeOutcome
+    || accidentalFreeBasis === "paid"
+    || accidentalFreeBasis === "plan"
+    || (accidentalFreeBasis === "courtesy" && freeReason.trim().length >= 3);
 
   async function mutate(url: string, method: string, body: object) {
     setBusy(true); setError(null);
     try {
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const data = await response.json();
+      const data = await readJsonResponse<{ error?: string }>(response);
       if (!response.ok) throw new Error(data.error ?? "The action could not be completed.");
       router.refresh();
     } catch (caught) {
@@ -61,7 +69,7 @@ export function SupportOrderActions({ orderId, workItem, staffId, canAssign, ass
     setBusy(true); setError(null);
     try {
       const response = await fetch(`/api/staff/support/orders/${orderId}/customer-link`, { method: "POST" });
-      const data = await response.json();
+      const data = await readJsonResponse<{ error?: string; path: string }>(response);
       if (!response.ok) throw new Error(data.error ?? "The link could not be created.");
       setCustomerLink(`${window.location.origin}${data.path}`);
     } catch (caught) {
@@ -71,6 +79,11 @@ export function SupportOrderActions({ orderId, workItem, staffId, canAssign, ass
 
   return (
     <div className="sticky top-5 space-y-4">
+      {workItem && mine && workItem.status === "snoozed" ? <section className="rounded-[1.5rem] border border-blue-200 bg-blue-50 p-6">
+        <h2 className="font-semibold text-blue-950">Request paused</h2>
+        <p className="mt-2 text-sm leading-6 text-blue-950/65">{workItem.snoozedUntil ? `Scheduled to return to the queue ${new Date(workItem.snoozedUntil).toLocaleString()}.` : "This item is temporarily out of the active queue."}</p>
+        <button type="button" onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "resume" })} disabled={busy} className="mt-4 h-10 w-full cursor-pointer rounded-xl bg-blue-950 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">Resume now</button>
+      </section> : null}
       {workItem && !mine ? (
         <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
           <h2 className="font-semibold">{workItem.assignedToName ? `Assigned to ${workItem.assignedToName}` : "Claim this item"}</h2>
@@ -82,31 +95,42 @@ export function SupportOrderActions({ orderId, workItem, staffId, canAssign, ass
 
       {workItem && canAssign ? <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
         <h2 className="font-semibold">Assign to staff</h2>
-        <label className="mt-3 block text-sm font-semibold">Team member</label>
-        <select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm"><option value="">Select a team member</option>{assignableStaff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}</select>
-        <label className="mt-3 block text-sm font-semibold">Assignment note</label>
-        <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Why is this being assigned?" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm" />
+        <label htmlFor="support-assignee" className="mt-3 block text-sm font-semibold">Team member</label>
+        <select id="support-assignee" value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm"><option value="">Select a team member</option>{assignableStaff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}</select>
+        <label htmlFor="support-assignment-note" className="mt-3 block text-sm font-semibold">Assignment note</label>
+        <textarea id="support-assignment-note" value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Why is this being assigned?" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm" />
         <button type="button" onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "assign", staffUserId: assigneeId, note })} disabled={busy || !assigneeId || note.trim().length < 2} className="mt-3 h-10 w-full cursor-pointer rounded-xl border border-black/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-35">Assign item</button>
       </section> : null}
 
-      {reviewState === "reviewed" ? <section className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-6"><p className="font-semibold text-emerald-900">Claim verified</p><p className="mt-2 text-sm leading-6 text-emerald-800/70">The return label is available to the customer and the replacement can move to Logistics when its path is ready.</p></section> : <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
+      {orderStatus === "unidentified" ? <section className="rounded-[1.5rem] border border-amber-300 bg-amber-50 p-6">
+        <h2 className="font-semibold text-amber-950">Identify this device</h2>
+        <p className="mt-2 text-sm leading-6 text-amber-950/65">Use the serial supplied by the customer, then select the coverage and replacement path you confirmed.</p>
+        <label htmlFor="identified-serial" className="mt-4 block text-sm font-semibold text-amber-950">Device serial</label>
+        <input id="identified-serial" value={identifySerial} onChange={(event) => setIdentifySerial(event.target.value.toUpperCase())} placeholder="202112T2E235968" className="mt-2 h-11 w-full rounded-xl border border-amber-300 bg-white px-3 font-mono text-sm" />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div><label htmlFor="identified-coverage" className="block text-sm font-semibold text-amber-950">Coverage</label><select id="identified-coverage" value={identifyCoverage} onChange={(event) => setIdentifyCoverage(event.target.value as "warranty" | "accident")} className="mt-2 h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm"><option value="warranty">Warranty</option><option value="accident">Accidental damage</option></select></div>
+          <div><label htmlFor="identified-flow" className="block text-sm font-semibold text-amber-950">Replacement path</label><select id="identified-flow" value={identifyFlow} onChange={(event) => setIdentifyFlow(event.target.value as "regular" | "advance")} className="mt-2 h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm"><option value="regular">Customer sends device first</option><option value="advance">Replacement ships first</option></select></div>
+        </div>
+        <button type="button" onClick={() => mutate(`/api/staff/support/orders/${orderId}/identify`, "POST", { serial: identifySerial, coverage: identifyCoverage, flow: identifyFlow })} disabled={busy || !mine || identifySerial.trim().length < 8} className="mt-4 h-11 w-full cursor-pointer rounded-xl bg-black text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">Attach device and continue</button>
+        {!mine ? <p className="mt-2 text-center text-xs text-amber-950/50">Claim the item before attaching a device.</p> : null}
+      </section> : reviewState === "reviewed" ? <section className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-6"><p className="font-semibold text-emerald-900">{orderStatus === "return_discrepancy" ? "Original claim verified" : "Claim verified"}</p><p className="mt-2 text-sm leading-6 text-emerald-800/70">{orderStatus === "return_discrepancy" ? "The package received by Logistics did not match the expected return. Resolve it below." : "The return label is available to the customer and the replacement can move to Logistics when its path is ready."}</p></section> : <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--green-strong)]">Verification gate</p>
-        <label className="mt-4 block text-sm font-semibold">Support-verified fault</label>
-        <textarea value={fault} onChange={(event) => setFault(event.target.value)} rows={4} className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm outline-none focus:border-[var(--green-strong)]" />
-        <label className="mt-4 block text-sm font-semibold">Confirmed coverage</label>
-        <select value={confirmedCoverage} onChange={(event) => setConfirmedCoverage(event.target.value as "warranty" | "accident")} className="mt-2 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm">
+        <label htmlFor="verified-fault" className="mt-4 block text-sm font-semibold">Support-verified fault</label>
+        <textarea id="verified-fault" value={fault} onChange={(event) => setFault(event.target.value)} rows={4} className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm outline-none focus:border-[var(--green-strong)]" />
+        <label htmlFor="confirmed-coverage" className="mt-4 block text-sm font-semibold">Confirmed coverage</label>
+        <select id="confirmed-coverage" value={confirmedCoverage} onChange={(event) => setConfirmedCoverage(event.target.value as "warranty" | "accident")} className="mt-2 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm">
           <option value="warranty">Warranty</option><option value="accident">Accidental damage</option>
         </select>
         {accidentalFreeOutcome ? <>
-          <label className="mt-4 block text-sm font-semibold">How should accidental damage be handled?</label>
-          <select value={accidentalFreeBasis} onChange={(event) => { setAccidentalFreeBasis(event.target.value as "" | "paid" | "plan" | "courtesy"); setFreeReason(""); }} className="mt-2 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm">
+          <label htmlFor="accidental-outcome" className="mt-4 block text-sm font-semibold">How should accidental damage be handled?</label>
+          <select id="accidental-outcome" value={accidentalFreeBasis} onChange={(event) => { setAccidentalFreeBasis(event.target.value as "" | "paid" | "plan" | "courtesy"); setFreeReason(""); }} className="mt-2 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm">
             <option value="">Select an outcome</option>
             <option value="paid">Apply the accidental-damage fee</option>
             <option value="plan">Covered by accidental-damage protection plan</option>
             <option value="courtesy">Courtesy exception</option>
           </select>
-          {accidentalFreeBasis === "courtesy" ? <><label className="mt-4 block text-sm font-semibold">Internal courtesy-exception reason</label><textarea value={freeReason} onChange={(event) => setFreeReason(event.target.value)} rows={3} placeholder="Explain why this one-time exception was approved" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm" /></> : null}
-        </> : requiresFreeReason ? <><label className="mt-4 block text-sm font-semibold">Internal reason for free warranty outcome</label><textarea value={freeReason} onChange={(event) => setFreeReason(event.target.value)} rows={3} placeholder="Explain why this claim is covered at no charge" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm" /></> : null}
+          {accidentalFreeBasis === "courtesy" ? <><label htmlFor="courtesy-reason" className="mt-4 block text-sm font-semibold">Internal courtesy-exception reason</label><textarea id="courtesy-reason" value={freeReason} onChange={(event) => setFreeReason(event.target.value)} rows={3} placeholder="Explain why this one-time exception was approved" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm" /></> : null}
+        </> : null}
         <button onClick={() => accidentalFreeOutcome && accidentalFreeBasis === "paid"
           ? mutate(`/api/staff/support/orders/${orderId}/review`, "POST", { action: "reprice", csVerifiedFault: fault })
           : mutate(`/api/staff/support/orders/${orderId}/review`, "POST", { action: "verify", csVerifiedFault: fault, confirmedCoverage, freeOutcomeReason: submittedFreeReason })}
@@ -115,7 +139,7 @@ export function SupportOrderActions({ orderId, workItem, staffId, canAssign, ass
         {!mine ? <p className="mt-2 text-center text-xs text-black/40">Claim the item before verifying it.</p> : null}
       </section>}
 
-      {mine && workItem ? (
+      {mine && workItem && workItem.status !== "snoozed" ? (
         <>
           <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
             <h2 className="font-semibold">Pause request</h2>
@@ -132,19 +156,52 @@ export function SupportOrderActions({ orderId, workItem, staffId, canAssign, ass
         <button onClick={generateCustomerLink} disabled={busy} className="mt-3 h-10 w-full rounded-xl border border-black/15 text-sm font-semibold">Generate customer link</button>
         {customerLink ? <input readOnly value={customerLink} onFocus={(event) => event.currentTarget.select()} aria-label="Secure customer link" className="mt-3 w-full rounded-xl bg-black/[0.04] p-3 text-xs" /> : null}
       </section>
-      <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
-        <h2 className="font-semibold">Customer outcome</h2>
-        <p className="mt-2 text-sm leading-6 text-black/50">This powers the outcome report. Verification sets the normal result automatically; use this for upgrades, no-replacement decisions, or exceptions.</p>
-        <select value={resolution} onChange={(event) => setResolution(event.target.value)} className="mt-3 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm"><option value="">Not decided</option><option value="free_refurb">Free replacement</option><option value="paid_refurb">Paid replacement</option><option value="upgrade">Upgrade</option><option value="no_replacement">No replacement</option><option value="exception">Exception</option></select>
-        <button type="button" onClick={() => mutate(`/api/staff/support/orders/${orderId}/resolution`, "PATCH", { resolution })} disabled={busy || !resolution || resolution === initialResolution} className="mt-3 h-10 w-full cursor-pointer rounded-xl border border-black/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-35">Save customer outcome</button>
-      </section>
+      {orderStatus === "unidentified" ? null : orderStatus === "return_discrepancy" ? <section className="rounded-[1.5rem] border border-amber-300 bg-amber-50 p-6">
+        <h2 className="font-semibold text-amber-950">Resolve return discrepancy</h2>
+        <p className="mt-2 text-sm leading-6 text-amber-950/65">After checking the received package, choose whether the replacement should continue or the request should close.</p>
+        <label htmlFor="discrepancy-outcome" className="mt-4 block text-sm font-semibold text-amber-950">Customer outcome</label>
+        <select id="discrepancy-outcome" value={resolution} onChange={(event) => setResolution(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm">
+          <option value="">Choose an outcome</option>
+          <option value="free_refurb">Continue with a free replacement</option>
+          <option value="paid_refurb">Continue with the paid replacement</option>
+          <option value="upgrade">Continue with an upgrade</option>
+          <option value="no_replacement">Close without a replacement</option>
+        </select>
+        <button type="button" onClick={() => mutate(`/api/staff/support/orders/${orderId}/resolution`, "PATCH", { resolution })} disabled={busy || !mine || !resolution} className="mt-4 h-11 w-full cursor-pointer rounded-xl bg-black text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">Resolve discrepancy</button>
+        {!mine ? <p className="mt-2 text-center text-xs text-amber-950/50">Claim the item before resolving it.</p> : null}
+      </section> : orderStatus === "fulfillment_blocked" ? <section className="rounded-[1.5rem] border border-amber-300 bg-amber-50 p-6">
+        <h2 className="font-semibold text-amber-950">Resolve fulfillment block</h2>
+        <p className="mt-2 text-sm leading-6 text-amber-950/65">Choose how this request should continue after resolving the inventory or shipping problem.</p>
+        <label htmlFor="fulfillment-outcome" className="mt-4 block text-sm font-semibold text-amber-950">Next customer outcome</label>
+        <select id="fulfillment-outcome" value={resolution} onChange={(event) => setResolution(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm">
+          <option value="">Choose an outcome</option>
+          <option value="exception">Retry the current replacement</option>
+          <option value="free_refurb">Continue with a free replacement</option>
+          <option value="paid_refurb">Continue with the paid replacement</option>
+          <option value="upgrade">Continue with an upgrade</option>
+          <option value="no_replacement">Close without a replacement</option>
+        </select>
+        <button type="button" onClick={() => mutate(`/api/staff/support/orders/${orderId}/resolution`, "PATCH", { resolution })} disabled={busy || !mine || !resolution} className="mt-4 h-11 w-full cursor-pointer rounded-xl bg-black text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">Resolve fulfillment block</button>
+        {!mine ? <p className="mt-2 text-center text-xs text-amber-950/50">Claim the item before resolving it.</p> : null}
+      </section> : <details className="group rounded-[1.5rem] border border-black/10 bg-white">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-6 [&::-webkit-details-marker]:hidden">
+          <div><h2 className="font-semibold">Override customer outcome</h2><p className="mt-1 text-sm text-black/45">Only for upgrades, denials, or other exceptions</p></div>
+          <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rotate-45 border-b-2 border-r-2 border-black/50 transition-transform group-open:-rotate-[135deg]" />
+        </summary>
+        <div className="border-t border-black/10 px-6 pb-6 pt-5">
+          <p className="text-sm leading-6 text-black/50">Verification records the normal result automatically. Change this only when the customer receives a different outcome.</p>
+          <select aria-label="Customer outcome override" value={resolution} onChange={(event) => setResolution(event.target.value)} className="mt-3 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm"><option value="">Not decided</option><option value="free_refurb">Free replacement</option><option value="paid_refurb">Paid replacement</option><option value="upgrade">Upgrade</option><option value="no_replacement">No replacement</option><option value="exception">Exception</option></select>
+          <button type="button" onClick={() => mutate(`/api/staff/support/orders/${orderId}/resolution`, "PATCH", { resolution })} disabled={busy || !resolution || resolution === initialResolution} className="mt-3 h-10 w-full cursor-pointer rounded-xl border border-black/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-35">Save override</button>
+        </div>
+      </details>}
       {refundableDepositInCents > 0 ? <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
         <h2 className="font-semibold">Refund deposit</h2>
         <p className="mt-2 text-sm leading-6 text-black/50">Up to ${(refundableDepositInCents / 100).toFixed(2)} remains refundable.</p>
-        <label className="mt-3 block text-sm font-semibold">Refund amount</label>
-        <div className="mt-2 flex items-center rounded-xl border border-black/15 px-3"><span className="text-sm text-black/45">$</span><input value={refundDollars} onChange={(event) => setRefundDollars(event.target.value)} inputMode="decimal" className="h-11 min-w-0 flex-1 px-2 text-sm outline-none" /></div>
-        <button onClick={() => { const cents = Math.round(Number(refundDollars) * 100); if (window.confirm(`Refund $${(cents / 100).toFixed(2)} to the original payment method?`)) void mutate(`/api/staff/support/orders/${orderId}/refund`, "POST", { amountInCents: cents }); }} disabled={busy || !refundEligible || !Number.isFinite(Number(refundDollars)) || Number(refundDollars) <= 0} className="mt-3 h-10 w-full rounded-xl bg-black text-sm font-semibold text-white disabled:opacity-35">Confirm refund</button>
-        {!refundEligible ? <p className="mt-2 text-xs text-black/40">Available once the return is in transit.</p> : null}
+        <label htmlFor="refund-amount" className="mt-3 block text-sm font-semibold">Refund amount</label>
+        <div className="mt-2 flex items-center rounded-xl border border-black/15 px-3"><span className="text-sm text-black/45">$</span><input id="refund-amount" value={refundDollars} onChange={(event) => setRefundDollars(event.target.value)} inputMode="decimal" className="h-11 min-w-0 flex-1 px-2 text-sm outline-none" /></div>
+        <button onClick={() => { const cents = Math.round(Number(refundDollars) * 100); if (window.confirm(`Refund $${(cents / 100).toFixed(2)} to the original payment method?`)) void mutate(`/api/staff/support/orders/${orderId}/refund`, "POST", { amountInCents: cents }); }} disabled={busy || !refundOwnedByMe || !refundEligible || !Number.isFinite(Number(refundDollars)) || Number(refundDollars) <= 0} className="mt-3 h-10 w-full rounded-xl bg-black text-sm font-semibold text-white disabled:opacity-35">Confirm refund</button>
+        {!refundOwnedByMe ? <p className="mt-2 text-xs text-black/40">Claim the refund item before issuing the refund.</p> : null}
+        {!refundEligible ? <p className="mt-2 text-xs text-black/40">Available once the return is {refundGate === "return_received" ? "received by Teracube" : "in transit"}.</p> : null}
       </section> : null}
       {error ? <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
     </div>

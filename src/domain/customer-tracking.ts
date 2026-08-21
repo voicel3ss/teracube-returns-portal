@@ -121,16 +121,22 @@ export function getCustomerTrackingView(
     replacementStatus: flow === "regular" ? "Waiting for your return" : "Preparing to ship",
   } : getBaseCustomerTrackingView(status, flow, copy);
   if (["unidentified", "return_discrepancy", "fulfillment_blocked"].includes(status)) return view;
+  const returnStatus = ["return_received", "closed"].includes(status) ? "Received"
+    : status === "return_in_transit" && shipments?.inboundStatus !== "received" && shipments?.inboundStatus !== "delivered" ? "In transit"
+    : shipments?.inboundStatus === "received" ? "Received"
+    : shipments?.inboundStatus === "delivered" ? "Delivered to Teracube; awaiting check-in"
+    : shipments?.inboundStatus === "in_transit" ? "In transit"
+    : shipments?.inboundStatus === "label_ready" ? "Label ready"
+    : view.returnStatus;
+  const replacementStatus = ["refurb_delivered", "closed"].includes(status) ? "Delivered"
+    : status === "refurb_dispatched" && shipments?.outboundStatus !== "delivered" ? "In transit"
+    : shipments?.outboundStatus === "delivered" ? "Delivered"
+    : shipments?.outboundStatus === "in_transit" ? "In transit"
+    : shipments?.outboundStatus === "label_ready" ? "Preparing to ship"
+    : view.replacementStatus;
   return {
     ...view,
-    returnStatus: shipments?.inboundStatus === "received" ? "Received"
-      : shipments?.inboundStatus === "delivered" ? "Delivered to Teracube; awaiting check-in"
-      : shipments?.inboundStatus === "in_transit" ? "In transit"
-      : shipments?.inboundStatus === "label_ready" ? "Label ready"
-      : view.returnStatus,
-    replacementStatus: shipments?.outboundStatus === "delivered" ? "Delivered"
-      : shipments?.outboundStatus === "in_transit" ? "In transit"
-      : shipments?.outboundStatus === "label_ready" ? "Preparing to ship"
-      : view.replacementStatus,
+    returnStatus,
+    replacementStatus,
   };
 }

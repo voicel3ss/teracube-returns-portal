@@ -9,7 +9,7 @@ const schema = z.object({ parentEmail: z.string().trim().email().max(254), devic
 export async function POST(request: Request) {
   const staff = await getAuthorizedStaff("order:create");
   if (!staff) return Response.json({ error: "Support authorization required." }, { status: 401 });
-  const parsed = schema.safeParse(await request.json());
+  const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Enter the parent email and a valid serial or child phone number." }, { status: 400 });
   const identity = await mockIdentityProvider.resolveDevice(parsed.data.deviceIdentifier.length === 15 ? { serial: parsed.data.deviceIdentifier } : { childPhone: parsed.data.deviceIdentifier });
   if (!identity) return Response.json({ error: "No Teracube device matches that serial or phone number." }, { status: 404 });

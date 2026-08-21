@@ -21,6 +21,7 @@ enum CirculationState {
   in_stock
   deployed
   in_repair
+  in_transfer
   retired
 }
 
@@ -141,6 +142,7 @@ enum WorkItemKind {
   fulfillment_blocked
   deposit_refund
   needs_clarification
+  customer_message
 }
 
 model Customer {
@@ -260,6 +262,8 @@ model ReplacementOrder {
   paymentLastFour          String?                @map("payment_last_four") @db.VarChar(4)
   amountPaidInCents        Int                    @default(0) @map("amount_paid_in_cents")
   depositRefundedInCents   Int                    @default(0) @map("deposit_refunded_in_cents")
+  quotedFeeInCents         Int                    @default(0) @map("quoted_fee_in_cents")
+  quotedDepositInCents     Int                    @default(0) @map("quoted_deposit_in_cents")
   encryptedShippingAddress String?                @map("encrypted_shipping_address")
   submittedAt              DateTime?              @map("submitted_at")
   createdAt                DateTime               @default(now()) @map("created_at")
@@ -281,12 +285,12 @@ model ReplacementOrder {
 }
 
 model ConversationMessage {
-  id                 String           @id @default(uuid()) @db.Uuid
-  replacementOrderId String           @map("replacement_order_id") @db.Uuid
-  senderKind         String           @map("sender_kind")
+  id                 String              @id @default(uuid()) @db.Uuid
+  replacementOrderId String              @map("replacement_order_id") @db.Uuid
+  senderKind         String              @map("sender_kind")
   body               String
-  createdAt          DateTime         @default(now()) @map("created_at")
-  replacementOrder   ReplacementOrder @relation(fields: [replacementOrderId], references: [id], onDelete: Cascade)
+  createdAt          DateTime            @default(now()) @map("created_at")
+  replacementOrder   ReplacementOrder    @relation(fields: [replacementOrderId], references: [id], onDelete: Cascade)
   attachments        MessageAttachment[]
 
   @@index([replacementOrderId, createdAt])
@@ -308,21 +312,21 @@ model MessageAttachment {
 }
 
 model Repair {
-  id                   String               @id @default(uuid()) @db.Uuid
-  deviceSerial         String               @map("device_serial") @db.VarChar(15)
-  status               RepairStatus         @default(received)
-  resolutionCategory   FaultCategory?       @map("resolution_category")
-  repairTeamResolution String?              @map("repair_team_resolution")
-  detailedNotes        String?              @map("detailed_notes")
-  terminalDisposition  TerminalDisposition? @map("terminal_disposition")
-  terminalSubDisposition String?             @map("terminal_sub_disposition")
-  terminalReason       String?              @map("terminal_reason")
-  receivedAt           DateTime             @default(now()) @map("received_at")
-  completedAt          DateTime?            @map("completed_at")
-  createdAt            DateTime             @default(now()) @map("created_at")
-  updatedAt            DateTime             @updatedAt @map("updated_at")
-  device               Device               @relation(fields: [deviceSerial], references: [serial])
-  photos               RepairPhoto[]
+  id                     String               @id @default(uuid()) @db.Uuid
+  deviceSerial           String               @map("device_serial") @db.VarChar(15)
+  status                 RepairStatus         @default(received)
+  resolutionCategory     FaultCategory?       @map("resolution_category")
+  repairTeamResolution   String?              @map("repair_team_resolution")
+  detailedNotes          String?              @map("detailed_notes")
+  terminalDisposition    TerminalDisposition? @map("terminal_disposition")
+  terminalSubDisposition String?              @map("terminal_sub_disposition")
+  terminalReason         String?              @map("terminal_reason")
+  receivedAt             DateTime             @default(now()) @map("received_at")
+  completedAt            DateTime?            @map("completed_at")
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  device                 Device               @relation(fields: [deviceSerial], references: [serial])
+  photos                 RepairPhoto[]
 
   @@index([deviceSerial, createdAt])
   @@index([status])

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { readJsonResponse } from "@/lib/read-json-response";
 
 export function PiiField({ orderId, field, masked }: { orderId: string; field: "parent_email" | "parent_address" | "payment_reference"; masked: string }) {
   const [value, setValue] = useState<string | null>(null);
@@ -10,7 +11,7 @@ export function PiiField({ orderId, field, masked }: { orderId: string; field: "
     setBusy(true); setError(null);
     try {
       const response = await fetch(`/api/staff/orders/${orderId}/pii`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field }) });
-      const data = await response.json();
+      const data = await readJsonResponse<{ error?: string; value: string }>(response);
       if (!response.ok) throw new Error(data.error ?? "Reveal failed.");
       setValue(data.value);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Reveal failed."); }

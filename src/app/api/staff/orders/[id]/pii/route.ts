@@ -12,7 +12,7 @@ const schema = z.object({ field: z.enum(["parent_email", "parent_address", "paym
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const staff = await getStaffContext();
   if (!staff) return Response.json({ error: "Staff authorization required." }, { status: 401 });
-  const parsed = schema.safeParse(await request.json());
+  const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Choose a valid protected field." }, { status: 400 });
   const activeTeam = chooseTeam(staff.teams, parsed.data.field);
   if (!activeTeam) return Response.json({ error: "Your active role cannot reveal this field." }, { status: 403 });

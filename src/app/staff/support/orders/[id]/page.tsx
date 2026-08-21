@@ -1,19 +1,24 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getAuthorizedStaff } from "@/auth/staff-request";
+import { getStaffContext } from "@/auth/staff-request";
 import { hasPermission } from "@/auth/permissions";
+import { staffDestination } from "@/auth/staff-destination";
 import { prisma } from "@/db/prisma";
 import { maskPii } from "@/security/pii";
 import { StaffShell } from "../../staff-shell";
 import { SupportOrderActions } from "./support-order-actions";
 import { StaffConversation } from "./staff-conversation";
 import { PiiField } from "@/components/pii-field";
+import { refundableDepositInCents } from "@/domain/order-pricing";
+import { selectSupportWorkItem } from "@/domain/support-work-selection";
+import { isDepositRefundEligible } from "@/domain/support-review";
 
 export const dynamic = "force-dynamic";
 
 export default async function SupportOrderPage({ params }: { params: Promise<{ id: string }> }) {
-  const staff = await getAuthorizedStaff("order:view_all");
+  const staff = await getStaffContext();
   if (!staff) redirect("/staff/login");
+  if (!hasPermission(staff.teams, "order:view_all")) redirect(staffDestination(staff.teams));
   const { id } = await params;
   const order = await prisma.replacementOrder.findUnique({
     where: { id },
@@ -23,19 +28,27 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
       processType: true,
       workItems: { where: { status: { not: "completed" } }, include: { assignedToStaff: true }, orderBy: { createdAt: "asc" } },
       messages: { include: { attachments: true }, orderBy: { createdAt: "asc" } },
+      shipments: { where: { type: "inbound" }, select: { status: true } },
     },
   });
   if (!order) notFound();
+  const config = await prisma.appConfig.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } });
   const events = await prisma.auditEvent.findMany({
     where: { entityType: "replacement_order", entityId: order.id },
     include: { actorStaff: true },
     orderBy: { occurredAt: "desc" },
     take: 30,
   });
-  const activeItem = order.workItems[0] ?? null;
+  const activeItem = selectSupportWorkItem(order.workItems, { status: order.status, reviewState: order.reviewState });
+  const refundItem = order.workItems.find((item) => item.kind === "deposit_refund");
   const canAssign = hasPermission(staff.teams, "queue:assign");
   const assignableStaff = canAssign ? await prisma.staffUser.findMany({ where: { active: true, memberships: { some: { team: { in: ["support", "ops_lead", "admin"] } } } }, select: { id: true, displayName: true }, orderBy: { displayName: "asc" } }) : [];
   const coverage = order.processType?.slug.startsWith("warranty-") ? "warranty" : "accident";
+  const displayedStatus = order.reviewState === "needs_clarification"
+    ? "waiting for customer"
+    : order.reviewState === "reviewed" && order.status === "awaiting_verification"
+      ? "verified"
+      : order.status.replaceAll("_", " ");
   const conversation = order.messages.map((message) => ({ id: message.id, senderKind: message.senderKind, body: message.body, sentAt: message.createdAt.toISOString(), photos: message.attachments.map((photo) => ({ id: photo.id, name: photo.filename, dataUrl: `data:${photo.contentType};base64,${Buffer.from(photo.data).toString("base64")}` })) }));
 
   return (
@@ -47,7 +60,7 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
             <section className="rounded-[1.5rem] border border-black/10 bg-white p-6 sm:p-8">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div><p className="text-sm font-semibold text-[var(--green-strong)]">Replacement order</p><h1 className="mt-1 text-3xl font-semibold tracking-[-0.035em]">#{String(order.orderNumber).padStart(4, "0")}</h1></div>
-                <div className="flex gap-2"><Badge>{order.status.replaceAll("_", " ")}</Badge><Badge>{order.reviewState.replaceAll("_", " ")}</Badge></div>
+                <Badge>{displayedStatus}</Badge>
               </div>
               <dl className="mt-7 grid gap-5 border-t border-black/10 pt-6 sm:grid-cols-2">
                 <Data label="Customer"><PiiField orderId={order.id} field="parent_email" masked={order.customer.emails[0] ? maskPii("parent_email", order.customer.emails[0].email) : "No email"} /></Data>
@@ -56,6 +69,8 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
                 <Data label="Serial">{order.returnedDeviceSerial ?? "Not known"}</Data>
                 <Data label="Replacement path">{order.processType?.name ?? "Not selected"}</Data>
                 <Data label="Amount captured">${(order.amountPaidInCents / 100).toFixed(2)}</Data>
+                <Data label="Quoted fee">${(order.quotedFeeInCents / 100).toFixed(2)}</Data>
+                <Data label="Quoted deposit">${(order.quotedDepositInCents / 100).toFixed(2)}</Data>
                 <Data label="Payment reference"><PiiField orderId={order.id} field="payment_reference" masked={order.paymentReference ? maskPii("payment_reference", order.paymentReference) : "Not available"} /></Data>
                 <Data label="Shipping address"><PiiField orderId={order.id} field="parent_address" masked={order.encryptedShippingAddress ? "••••••••" : "Not available"} /></Data>
                 <Data label="Customer outcome">{order.resolution?.replaceAll("_", " ") ?? "Not decided"}</Data>
@@ -78,14 +93,15 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
               </ol>
             </section>
 
-            <StaffConversation orderId={order.id} messages={conversation} canReply />
+            <StaffConversation orderId={order.id} messages={conversation} canReply={activeItem?.assignedToStaffId === staff.id} />
           </div>
 
           <aside>
             <SupportOrderActions
-              key={`${order.id}-${order.reviewState}-${order.resolution ?? "none"}`}
+              key={`${order.id}-${order.status}-${order.reviewState}-${order.resolution ?? "none"}`}
               orderId={order.id}
-              workItem={activeItem ? { id: activeItem.id, status: activeItem.status, assignedToStaffId: activeItem.assignedToStaffId, assignedToName: activeItem.assignedToStaff?.displayName ?? null } : null}
+              orderStatus={order.status}
+              workItem={activeItem ? { id: activeItem.id, status: activeItem.status, assignedToStaffId: activeItem.assignedToStaffId, assignedToName: activeItem.assignedToStaff?.displayName ?? null, snoozedUntil: activeItem.snoozedUntil?.toISOString() ?? null } : null}
               staffId={staff.id}
               canAssign={canAssign}
               assignableStaff={assignableStaff}
@@ -93,9 +109,11 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
               initialFault={order.customerFaultText ?? ""}
               coverage={coverage}
               resolution={order.resolution}
-              requiresFreeReason={Boolean(order.processType && order.processType.feeInCents === 0)}
-              refundableDepositInCents={Math.max(0, Math.min(order.processType?.depositInCents ?? 0, order.amountPaidInCents) - order.depositRefundedInCents)}
-              refundEligible={["return_in_transit", "return_received"].includes(order.status)}
+              requiresFreeReason={Boolean(order.processType && order.quotedFeeInCents === 0)}
+              refundableDepositInCents={refundableDepositInCents(order)}
+              refundEligible={isDepositRefundEligible({ orderStatus: order.status, inboundShipmentStatuses: order.shipments.map((shipment) => shipment.status), refundGate: config.depositRefundGate === "return_received" ? "return_received" : "return_in_transit" })}
+              refundGate={config.depositRefundGate === "return_received" ? "return_received" : "return_in_transit"}
+              refundOwnedByMe={refundItem?.assignedToStaffId === staff.id}
             />
           </aside>
         </div>

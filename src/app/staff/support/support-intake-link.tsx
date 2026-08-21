@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { readJsonResponse } from "@/lib/read-json-response";
 
 export function SupportIntakeLink() {
   const [parentEmail, setParentEmail] = useState("");
@@ -23,7 +24,7 @@ export function SupportIntakeLink() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ parentEmail, deviceIdentifier }),
       });
-      const body = (await response.json()) as { path?: string; error?: string };
+      const body = await readJsonResponse<{ path?: string; error?: string }>(response);
       if (!response.ok || !body.path) throw new Error(body.error ?? "The secure link could not be created.");
       setPath(body.path);
     } catch (caught) {
@@ -49,7 +50,7 @@ export function SupportIntakeLink() {
       <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
         <label className="grid gap-1.5 text-sm font-semibold">
           Parent email
-          <input value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} type="email" placeholder="parent@example.com" className="h-11 rounded-xl border border-black/15 px-4 font-normal outline-none focus:border-[var(--green-strong)]" />
+          <input value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} type="email" placeholder="Enter email" className="h-11 rounded-xl border border-black/15 px-4 font-normal outline-none focus:border-[var(--green-strong)]" />
         </label>
         <label className="grid gap-1.5 text-sm font-semibold">
           Device serial or child phone

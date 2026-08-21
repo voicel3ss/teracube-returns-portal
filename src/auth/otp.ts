@@ -21,7 +21,7 @@ export interface OtpRepository {
   create(challenge: StoredOtpChallenge): Promise<void>;
   findById(id: string): Promise<StoredOtpChallenge | null>;
   recordFailedAttempt(id: string): Promise<void>;
-  consume(id: string, consumedAt: Date): Promise<void>;
+  consume(id: string, consumedAt: Date): Promise<boolean>;
 }
 
 export class OtpService {
@@ -83,8 +83,7 @@ export class OtpService {
       return false;
     }
 
-    await this.repository.consume(challenge.id, this.now());
-    return true;
+    return this.repository.consume(challenge.id, this.now());
   }
 }
 
@@ -105,8 +104,10 @@ export class InMemoryOtpRepository implements OtpRepository {
     if (challenge) this.challenges.set(id, { ...challenge, failedAttempts: challenge.failedAttempts + 1 });
   }
 
-  async consume(id: string, consumedAt: Date): Promise<void> {
+  async consume(id: string, consumedAt: Date): Promise<boolean> {
     const challenge = this.challenges.get(id);
-    if (challenge) this.challenges.set(id, { ...challenge, consumedAt });
+    if (!challenge || challenge.consumedAt) return false;
+    this.challenges.set(id, { ...challenge, consumedAt });
+    return true;
   }
 }

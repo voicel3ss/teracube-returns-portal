@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getStaffContext } from "@/auth/staff-request";
 import { hasPermission } from "@/auth/permissions";
+import { staffDestination } from "@/auth/staff-destination";
 import { prisma } from "@/db/prisma";
 import { StaffShell } from "../support/staff-shell";
 import { PendingRepairRow } from "./pending-repair-row";
@@ -12,11 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function RepairPage() {
   const staff = await getStaffContext();
   if (!staff) redirect("/staff/login");
-  if (!hasPermission(staff.teams, "repair:record")) {
-    if (hasPermission(staff.teams, "order:view_all")) redirect("/staff/support");
-    if (hasPermission(staff.teams, "shipment:dispatch")) redirect("/staff/logistics");
-    redirect("/staff/login");
-  }
+  if (!hasPermission(staff.teams, "repair:record")) redirect(staffDestination(staff.teams));
 
   const [repairs, pendingDevices] = await Promise.all([
     prisma.repair.findMany({

@@ -33,7 +33,7 @@ export function StaffHeader({ name, teams, area }: { name: string; teams: StaffT
           <span className="hidden text-black/45 sm:inline">{name}</span>
           <button type="button" onClick={signOut} className="cursor-pointer rounded-lg border border-black/10 px-3 py-2 font-semibold">Sign out</button>
         </div>
-        <nav className="flex w-full gap-5 overflow-x-auto pb-1 text-sm font-medium text-black/50 sm:hidden" aria-label="Staff sections">
+        <nav className="flex w-full flex-wrap gap-x-5 gap-y-2 pb-1 text-sm font-medium text-black/50 sm:hidden" aria-label="Staff sections">
           {hasPermission(teams, "order:view_all") ? <Link href="/staff/support" className={area === "support" ? "text-black" : ""}>Support</Link> : null}
           {hasPermission(teams, "repair:record") ? <Link href="/staff/repair" className={area === "repair" ? "text-black" : ""}>Repair</Link> : null}
           {hasPermission(teams, "shipment:dispatch") ? <Link href="/staff/logistics" className={area === "logistics" ? "text-black" : ""}>Logistics</Link> : null}

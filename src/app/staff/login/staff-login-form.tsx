@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { GoogleStaffSignIn } from "./google-staff-sign-in";
+import { readJsonResponse } from "@/lib/read-json-response";
 
 export function StaffLoginForm({ googleClientId }: { googleClientId?: string }) {
   const router = useRouter();
-  const [email, setEmail] = useState("support@myteracube.com");
+  const [email, setEmail] = useState("");
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [localCode, setLocalCode] = useState<string | null>(null);
@@ -22,7 +23,7 @@ export function StaffLoginForm({ googleClientId }: { googleClientId?: string }) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const body = await response.json();
+      const body = await readJsonResponse<{ error?: string; challengeId?: string; verificationCode?: string }>(response);
       if (!response.ok) throw new Error(body.error ?? "Unable to issue a code.");
       if (!body.challengeId) throw new Error("No active staff account was found in this local environment.");
       setChallengeId(body.challengeId);
@@ -45,7 +46,7 @@ export function StaffLoginForm({ googleClientId }: { googleClientId?: string }) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, challengeId, code }),
       });
-      const body = await response.json();
+      const body = await readJsonResponse<{ error?: string; destination?: string }>(response);
       if (!response.ok) throw new Error(body.error ?? "Unable to sign in.");
       router.push(body.destination ?? "/staff/support");
       router.refresh();

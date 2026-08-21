@@ -3,6 +3,7 @@
 import Script from "next/script";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { readJsonResponse } from "@/lib/read-json-response";
 
 declare global {
   interface Window {
@@ -24,7 +25,7 @@ export function GoogleStaffSignIn({ clientId }: { clientId: string }) {
       callback: async ({ credential }) => {
         setError("");
         const response = await fetch("/api/staff/auth/google", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ credential }) });
-        const body = (await response.json()) as { error?: string; destination?: string };
+        const body = await readJsonResponse<{ error?: string; destination?: string }>(response);
         if (!response.ok) { setError(body.error ?? "Google sign-in failed."); return; }
         router.push(body.destination ?? "/staff/support");
         router.refresh();

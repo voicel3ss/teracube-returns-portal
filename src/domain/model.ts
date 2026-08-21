@@ -4,7 +4,7 @@ export type DeviceType = (typeof deviceTypes)[number];
 export const deviceGrades = ["new", "refurbished"] as const;
 export type DeviceGrade = (typeof deviceGrades)[number];
 
-export const circulationStates = ["in_stock", "deployed", "in_repair", "retired"] as const;
+export const circulationStates = ["in_stock", "deployed", "in_repair", "in_transfer", "retired"] as const;
 export type CirculationState = (typeof circulationStates)[number];
 
 export const replacementFlows = ["advance", "regular"] as const;

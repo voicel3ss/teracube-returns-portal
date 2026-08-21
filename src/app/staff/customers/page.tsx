@@ -1,26 +1,41 @@
 import { redirect } from "next/navigation";
-import { getAuthorizedStaff } from "@/auth/staff-request";
+import { getStaffContext } from "@/auth/staff-request";
+import { hasPermission } from "@/auth/permissions";
+import { staffDestination } from "@/auth/staff-destination";
 import { prisma } from "@/db/prisma";
 import { StaffShell } from "../support/staff-shell";
 import { maskPii } from "@/security/pii";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const staff = await getAuthorizedStaff("order:view_all");
+export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ q?: string | string[] }> }) {
+  const staff = await getStaffContext();
   if (!staff) redirect("/staff/login");
-  const { q = "" } = await searchParams;
+  if (!hasPermission(staff.teams, "order:view_all")) redirect(staffDestination(staff.teams));
+  const params = await searchParams;
+  const q = typeof params.q === "string" ? params.q : "";
+  const normalizedQuery = q.trim();
+  const serialQuery = normalizedQuery.toUpperCase();
   const customers = await prisma.customer.findMany({
     where: {
       mergedIntoId: null,
-      ...(q.trim() ? { OR: [
-        { emails: { some: { normalized: { contains: q.trim().toLowerCase() } } } },
-        { devices: { some: { serial: { contains: q.trim().toUpperCase(), mode: "insensitive" } } } },
-      ] } : {}),
+      AND: [
+        { OR: [{ devices: { some: {} } }, { orders: { some: {} } }] },
+        ...(normalizedQuery ? [{ OR: [
+          { emails: { some: { normalized: { contains: normalizedQuery.toLowerCase() } } } },
+          { devices: { some: { serial: { contains: serialQuery, mode: "insensitive" as const } } } },
+          { orders: { some: { OR: [
+            { returnedDeviceSerial: { contains: serialQuery, mode: "insensitive" as const } },
+            { outboundDeviceSerial: { contains: serialQuery, mode: "insensitive" as const } },
+          ] } } },
+        ] }] : []),
+      ],
     },
     include: {
       emails: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] },
-      orders: { select: { returnedDeviceSerial: true, outboundDeviceSerial: true } },
+      devices: { select: { serial: true } },
+      orders: { select: { id: true, orderNumber: true, status: true, returnedDeviceSerial: true, outboundDeviceSerial: true }, orderBy: { createdAt: "desc" } },
       _count: { select: { devices: true, orders: true } },
     },
     orderBy: { updatedAt: "desc" },
@@ -28,7 +43,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   });
   const customerRows = customers.map((customer) => ({
     ...customer,
-    associatedDeviceCount: new Set(customer.orders.flatMap((order) => [order.returnedDeviceSerial, order.outboundDeviceSerial].filter((serial): serial is string => Boolean(serial)))).size,
+    associatedDeviceCount: new Set([...customer.devices.map((device) => device.serial), ...customer.orders.flatMap((order) => [order.returnedDeviceSerial, order.outboundDeviceSerial].filter((serial): serial is string => Boolean(serial)))]).size,
   }));
 
   return (
@@ -48,10 +63,11 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <h2 className="font-semibold">Active customers</h2>
           <div className="mt-4 divide-y divide-black/8">
             {customerRows.map((customer) => (
-              <div key={customer.id} className="flex items-center justify-between gap-4 py-4">
-                <div>
+              <div key={customer.id} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto] sm:items-start">
+                <div className="min-w-0">
                   <p className="font-medium">{customer.emails[0] ? maskPii("parent_email", customer.emails[0].email) : "No email"}</p>
                   <p className="mt-1 text-xs text-black/40">{customer.emails.length} email{customer.emails.length === 1 ? "" : "s"} · {customer.associatedDeviceCount} associated device{customer.associatedDeviceCount === 1 ? "" : "s"} · {customer._count.orders} order{customer._count.orders === 1 ? "" : "s"}</p>
+                  {customer.orders.length ? <div className="mt-3 flex flex-wrap gap-2">{customer.orders.map((order) => <Link key={order.id} href={`/staff/support/orders/${order.id}`} className="rounded-lg border border-black/10 bg-black/[.02] px-3 py-1.5 text-xs font-semibold hover:border-black/25">#{String(order.orderNumber).padStart(4, "0")} · {order.status.replaceAll("_", " ")}</Link>)}</div> : <p className="mt-2 text-xs text-black/35">No replacement requests yet.</p>}
                 </div>
                 <span className="font-mono text-xs text-black/30">Customer …{customer.id.slice(-6)}</span>
               </div>

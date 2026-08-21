@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getStaffContext } from "@/auth/staff-request";
 import { hasPermission } from "@/auth/permissions";
+import { staffDestination } from "@/auth/staff-destination";
 import { prisma } from "@/db/prisma";
 import { StaffShell } from "./staff-shell";
 import { SupportIntakeLink } from "./support-intake-link";
@@ -16,24 +17,22 @@ const kindLabels = {
   fulfillment_blocked: "Resolve fulfillment block",
   deposit_refund: "Review deposit refund",
   needs_clarification: "Customer clarification",
+  customer_message: "Customer message",
 } as const;
 
-export default async function SupportQueuePage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+export default async function SupportQueuePage({ searchParams }: { searchParams: Promise<{ q?: string | string[] }> }) {
   const staff = await getStaffContext();
   if (!staff) redirect("/staff/login");
-  if (!hasPermission(staff.teams, "order:view_all")) {
-    if (hasPermission(staff.teams, "repair:record")) redirect("/staff/repair");
-    if (hasPermission(staff.teams, "shipment:dispatch")) redirect("/staff/logistics");
-    redirect("/staff/login");
-  }
-  const { q = "" } = await searchParams;
+  if (!hasPermission(staff.teams, "order:view_all")) redirect(staffDestination(staff.teams));
+  const params = await searchParams;
+  const q = typeof params.q === "string" ? params.q : "";
   const now = new Date();
   const [items, searchResults] = await Promise.all([
     prisma.workItem.findMany({
       where: {
         team: "support",
         status: { in: ["open", "claimed", "snoozed"] },
-        OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }],
+        OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }, { status: "snoozed", assignedToStaffId: staff.id }],
       },
       include: {
         assignedToStaff: true,
@@ -58,7 +57,9 @@ export default async function SupportQueuePage({ searchParams }: { searchParams:
         })
       : Promise.resolve([]),
   ]);
-  const myItems = items.filter((item) => item.assignedToStaffId === staff.id);
+  const myItems = items
+    .filter((item) => item.assignedToStaffId === staff.id)
+    .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
   const teamItems = items.filter((item) => !item.assignedToStaffId);
 
   return (
@@ -124,7 +125,7 @@ function QueueList({ items, empty }: { items: QueueListItem[]; empty: string }) 
     const order = item.replacementOrder;
     return (
       <Link key={item.id} data-work-item-id={item.id} href={`/staff/support/orders/${order.id}`} className="group rounded-2xl border border-black/10 bg-white p-5 shadow-[0_10px_30px_rgba(20,30,22,0.035)] transition hover:-translate-y-0.5 hover:border-black/25">
-        <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--green-strong)]">{item.kind === "needs_clarification" && order.reviewState === "reviewed" ? "Customer message" : item.kind === "needs_clarification" ? "Customer replied" : kindLabels[item.kind]}</p><h3 className="mt-1 text-lg font-semibold">Order #{String(order.orderNumber).padStart(4, "0")}</h3></div><span className="rounded-full bg-black/[0.05] px-2.5 py-1 text-xs font-medium">{item.status}</span></div>
+        <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--green-strong)]">{item.kind === "needs_clarification" ? "Customer replied" : kindLabels[item.kind]}</p><h3 className="mt-1 text-lg font-semibold">Order #{String(order.orderNumber).padStart(4, "0")}</h3></div><span className="rounded-full bg-black/[0.05] px-2.5 py-1 text-xs font-medium">{item.status}</span></div>
         <p className="mt-3 text-sm text-black/55">{order.returnedDevice?.model.name ?? "Device not identified"} · {order.returnedDeviceSerial ?? "No serial"}</p>
         <div className="mt-4 flex items-center justify-between border-t border-black/8 pt-3 text-xs text-black/40"><span>{order.customer.emails[0] ? maskPii("parent_email", order.customer.emails[0].email) : ""}</span><span>{order.processType?.name ?? "Manual review"} →</span></div>
       </Link>

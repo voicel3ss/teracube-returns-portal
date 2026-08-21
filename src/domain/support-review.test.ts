@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateClaimReview, validateDepositRefund } from "./support-review";
+import { isDepositRefundEligible, validateClaimReview, validateDepositRefund } from "./support-review";
 
 describe("support claim review", () => {
   it("blocks a coverage change without repricing or an approved free exception", () => {
@@ -7,9 +7,9 @@ describe("support claim review", () => {
       .toContain("correct paid process");
   });
 
-  it("requires a reason for a free outcome", () => {
+  it("accepts a standard free warranty claim without a redundant internal reason", () => {
     expect(validateClaimReview({ configuredCoverage: "warranty", confirmedCoverage: "warranty", feeInCents: 0 }))
-      .toContain("internal reason");
+      .toBeNull();
   });
 
   it("accepts a paid claim with matching coverage", () => {
@@ -48,5 +48,15 @@ describe("support deposit refunds", () => {
   it("can require physical receipt before a deposit refund", () => {
     const result = validateDepositRefund({ status: "return_in_transit", amountInCents: 1000, depositInCents: 8000, alreadyRefundedInCents: 0, amountPaidInCents: 8000, refundGate: "return_received" });
     expect(result.error).toContain("must be received");
+  });
+
+  it("keeps a refund eligible after the order closes", () => {
+    expect(isDepositRefundEligible({ orderStatus: "closed" })).toBe(true);
+    expect(isDepositRefundEligible({ orderStatus: "closed", refundGate: "return_received" })).toBe(true);
+  });
+
+  it("uses the physical inbound leg when the aggregate order status emphasizes the replacement", () => {
+    expect(isDepositRefundEligible({ orderStatus: "refurb_delivered", inboundShipmentStatuses: ["delivered"] })).toBe(true);
+    expect(isDepositRefundEligible({ orderStatus: "refurb_delivered", inboundShipmentStatuses: ["delivered"], refundGate: "return_received" })).toBe(false);
   });
 });

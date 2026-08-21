@@ -2,13 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getStaffContext } from "@/auth/staff-request";
 import { hasPermission } from "@/auth/permissions";
+import { staffDestination } from "@/auth/staff-destination";
 import { prisma } from "@/db/prisma";
 import { StaffShell } from "../support/staff-shell";
 
 export const dynamic = "force-dynamic";
 export default async function OversightPage() {
   const staff = await getStaffContext(); if (!staff) redirect("/staff/login");
-  if (!hasPermission(staff.teams, "oversight:view")) { if (hasPermission(staff.teams, "config:manage")) redirect("/staff/admin"); if (hasPermission(staff.teams, "order:view_all")) redirect("/staff/support"); if (hasPermission(staff.teams, "repair:record")) redirect("/staff/repair"); if (hasPermission(staff.teams, "shipment:dispatch")) redirect("/staff/logistics"); redirect("/staff/login"); }
+  if (!hasPermission(staff.teams, "oversight:view")) redirect(staffDestination(staff.teams));
   const config = await prisma.appConfig.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } });
   const now = new Date(); const staleBefore = new Date(now.getTime() - config.staleClaimDays * 86400000); const repairBefore = new Date(now.getTime() - config.stuckRepairDays * 86400000); const deliveredBefore = new Date(now.getTime() - 86400000);
   const [owned, deliveredNotScanned, stuckRepairs, resolutions] = await Promise.all([

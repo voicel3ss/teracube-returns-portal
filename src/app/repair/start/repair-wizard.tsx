@@ -67,9 +67,9 @@ async function encodePhotos(files: File[]) {
   })));
 }
 
-export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
+export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: { parentAppEntry?: string; initialLookupType?: "serial" | "phone" }) {
   const [step, setStep] = useState<Step>("identify");
-  const [lookupType, setLookupType] = useState<"serial" | "phone">("serial");
+  const [lookupType, setLookupType] = useState<"serial" | "phone">(initialLookupType);
   const [identifier, setIdentifier] = useState("");
   const [email, setEmail] = useState("");
   const [emailChallengeId, setEmailChallengeId] = useState<string | null>(null);
@@ -78,6 +78,8 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
   const [localEmailCode, setLocalEmailCode] = useState<string | null>(null);
   const [device, setDevice] = useState<Device | null>(null);
   const [lookupFailed, setLookupFailed] = useState(false);
+  const [identificationHelpText, setIdentificationHelpText] = useState("");
+  const [identificationPhotos, setIdentificationPhotos] = useState<File[]>([]);
   const [faultCategory, setFaultCategory] = useState<FaultCategory | null>(null);
   const [faultText, setFaultText] = useState("");
   const [faultPhotos, setFaultPhotos] = useState<File[]>([]);
@@ -188,10 +190,11 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
     setBusy(true);
     setError(null);
     try {
+      const photos = await encodePhotos(identificationPhotos);
       const response = await fetch("/api/repair/unidentified", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parentEmail: email, emailVerificationToken }),
+        body: JSON.stringify({ parentEmail: email, emailVerificationToken, lookupType, identifier: identifier.trim(), message: identificationHelpText, photos }),
       });
       const body = await readApiResponse(response);
       if (!response.ok) throw new Error(body.error ?? "We couldn't create the request.");
@@ -486,17 +489,46 @@ export function RepairWizard({ parentAppEntry }: { parentAppEntry?: string }) {
 
             {lookupFailed ? (
               <div className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-5">
-                <h2 className="font-semibold">We couldn’t identify it yet</h2>
+                <h2 className="font-semibold">We couldn’t find that device</h2>
                 <p className="mt-2 text-sm leading-6 text-black/60">
-                  In the Parent app, open the child’s device and look for its serial. If the phone is unusable, support can identify it with you.
+                  Check the serial in the Parent app and try again. If you still cannot find it, create a Support request and we’ll help identify the device on this website.
                 </p>
+                <label className="mt-4 block text-sm font-semibold" htmlFor="identification-help">Anything else Support should know? <span className="font-normal text-black/45">(optional)</span></label>
+                <textarea
+                  id="identification-help"
+                  value={identificationHelpText}
+                  onChange={(event) => setIdentificationHelpText(event.target.value)}
+                  rows={3}
+                  placeholder="For example, the phone will not turn on and I cannot open Settings."
+                  className="mt-2 w-full rounded-xl border border-black/15 bg-white p-3 text-sm outline-none focus:border-[var(--green-strong)]"
+                />
+                <label className="mt-4 block text-sm font-semibold" htmlFor="identification-photos">Photos <span className="font-normal text-black/45">(optional, up to 3)</span></label>
+                <input
+                  id="identification-photos"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files ?? []).slice(0, 3);
+                    if (files.some((file) => file.size > 5_000_000)) {
+                      setError("Each photo must be 5 MB or smaller.");
+                      event.target.value = "";
+                      setIdentificationPhotos([]);
+                      return;
+                    }
+                    setError(null);
+                    setIdentificationPhotos(files);
+                  }}
+                  className="mt-2 block w-full rounded-xl border border-dashed border-black/20 bg-white p-4 text-sm file:mr-4 file:rounded-full file:border-0 file:bg-black file:px-4 file:py-2 file:font-semibold file:text-white"
+                />
+                {identificationPhotos.length > 0 ? <p className="mt-2 text-xs text-black/45">{identificationPhotos.length} photo{identificationPhotos.length === 1 ? "" : "s"} selected</p> : null}
                 <button
                   type="button"
                   onClick={requestIdentificationHelp}
                   disabled={busy}
-                  className="mt-4 text-sm font-semibold text-black underline decoration-[var(--green)] decoration-2 underline-offset-4"
+                  className="mt-4 h-11 w-full rounded-xl bg-black px-5 text-sm font-semibold text-white hover:bg-black/80 disabled:opacity-35"
                 >
-                  Ask support to identify it
+                  {busy ? "Creating request…" : "Create Support request"}
                 </button>
               </div>
             ) : null}

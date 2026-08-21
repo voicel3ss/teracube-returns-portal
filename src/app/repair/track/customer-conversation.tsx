@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PhotoLightbox } from "@/components/photo-lightbox";
+import { readJsonResponse } from "@/lib/read-json-response";
 
 type Message = { id: string; senderKind: string; body: string; sentAt: string; photos: { id: string; name: string; dataUrl: string }[] };
 
@@ -20,16 +21,20 @@ export function CustomerConversation({ token, messages: initialMessages }: { tok
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const refreshInFlight = useRef(false);
 
   const refreshMessages = useCallback(async () => {
-    if (document.visibilityState === "hidden") return;
+    if (document.visibilityState === "hidden" || refreshInFlight.current) return;
+    refreshInFlight.current = true;
     try {
       const response = await fetch(`/api/repair/messages?token=${encodeURIComponent(token)}`, { cache: "no-store" });
       if (!response.ok) return;
-      const data = await response.json();
+      const data = await readJsonResponse<{ messages: Message[] }>(response);
       if (Array.isArray(data.messages)) setMessages(data.messages);
     } catch {
       // A temporary connection failure should not interrupt a message draft.
+    } finally {
+      refreshInFlight.current = false;
     }
   }, [token]);
 
@@ -45,7 +50,7 @@ export function CustomerConversation({ token, messages: initialMessages }: { tok
     try {
       const photos = await encodePhotos(files);
       const response = await fetch("/api/repair/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, message, photos }) });
-      const data = await response.json();
+      const data = await readJsonResponse<{ error?: string }>(response);
       if (!response.ok) throw new Error(data.error ?? "Your reply could not be sent.");
       setMessage(""); setFiles([]); await refreshMessages();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Your reply could not be sent."); }
@@ -66,8 +71,8 @@ export function CustomerConversation({ token, messages: initialMessages }: { tok
     </div>
     <label htmlFor="customer-reply" className="mt-6 block text-sm font-semibold">Reply to support</label>
     <textarea id="customer-reply" value={message} onChange={(event) => setMessage(event.target.value)} rows={3} placeholder="Type your reply" className="mt-2 w-full rounded-xl border border-black/15 bg-white p-3 text-sm outline-none focus:border-[var(--green-strong)]" />
-    <input type="file" accept="image/jpeg,image/png,image/webp" multiple aria-label="Attach photos" onChange={(event) => { const selected = Array.from(event.target.files ?? []).slice(0, 3); if (selected.some((file) => file.size > 5_000_000)) { setError("Each photo must be 5 MB or smaller."); setFiles([]); event.target.value = ""; } else setFiles(selected); }} className="mt-3 block w-full text-xs file:mr-3 file:rounded-full file:border-0 file:bg-white file:px-3 file:py-2 file:font-semibold" />
-    <button type="button" onClick={reply} disabled={busy || message.trim().length < 2} className="mt-4 h-11 rounded-xl bg-black px-6 text-sm font-semibold text-white disabled:opacity-35">{busy ? "Sending…" : "Send reply"}</button>
+    <input type="file" accept="image/jpeg,image/png,image/webp" multiple aria-label="Attach photos" onChange={(event) => { const selected = Array.from(event.target.files ?? []).slice(0, 3); if (selected.some((file) => file.size > 5_000_000)) { setError("Each photo must be 5 MB or smaller."); setFiles([]); event.target.value = ""; } else { setError(null); setFiles(selected); } }} className="mt-3 block w-full cursor-pointer text-xs file:mr-3 file:cursor-pointer file:rounded-full file:border-0 file:bg-white file:px-3 file:py-2 file:font-semibold" />
+    <button type="button" onClick={reply} disabled={busy || (message.trim().length < 2 && files.length === 0)} className="mt-4 h-11 cursor-pointer rounded-xl bg-black px-6 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">{busy ? "Sending…" : "Send reply"}</button>
     {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
   </section>;
 }

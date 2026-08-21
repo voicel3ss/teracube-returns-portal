@@ -9,9 +9,12 @@ const schema = z.object({ approvalMode: z.literal("auto"), depositRefundGate: z.
 export async function PUT(request: Request) {
   const staff = await getAuthorizedStaff("config:manage");
   if (!staff) return Response.json({ error: "Admin authorization required." }, { status: 401 });
-  const parsed = schema.safeParse(await request.json());
+  const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid configuration." }, { status: 400 });
   if (parsed.data.returnEscalationDays <= parsed.data.returnReminderDays) return Response.json({ error: "Return escalation must occur after the reminder." }, { status: 400 });
+  const processIds = parsed.data.processTypes.map((process) => process.id);
+  if (new Set(processIds).size !== processIds.length) return Response.json({ error: "Each replacement option can appear only once." }, { status: 400 });
+  if (await prisma.processType.count({ where: { id: { in: processIds } } }) !== processIds.length) return Response.json({ error: "One of these replacement options no longer exists. Refresh before saving." }, { status: 409 });
   await prisma.$transaction([
     prisma.appConfig.upsert({ where: { id: "default" }, update: { approvalMode: parsed.data.approvalMode, depositRefundGate: parsed.data.depositRefundGate, returnReminderDays: parsed.data.returnReminderDays, returnEscalationDays: parsed.data.returnEscalationDays, staleClaimDays: parsed.data.staleClaimDays, unidentifiedEscalationDays: parsed.data.unidentifiedEscalationDays, stuckRepairDays: parsed.data.stuckRepairDays, returnInstructions: parsed.data.returnInstructions, customerTrackingCopy: parsed.data.customerTrackingCopy }, create: { id: "default", approvalMode: parsed.data.approvalMode, depositRefundGate: parsed.data.depositRefundGate, returnReminderDays: parsed.data.returnReminderDays, returnEscalationDays: parsed.data.returnEscalationDays, staleClaimDays: parsed.data.staleClaimDays, unidentifiedEscalationDays: parsed.data.unidentifiedEscalationDays, stuckRepairDays: parsed.data.stuckRepairDays, returnInstructions: parsed.data.returnInstructions, customerTrackingCopy: parsed.data.customerTrackingCopy } }),
     ...parsed.data.processTypes.map((process) => prisma.processType.update({ where: { id: process.id }, data: { feeInCents: process.feeInCents, depositInCents: process.depositInCents, description: process.description, active: process.active } })),

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { CustomerTrackingCopy } from "@/domain/customer-tracking-copy";
+import { readJsonResponse } from "@/lib/read-json-response";
 
 type Config = {
   approvalMode: string;
@@ -15,29 +16,17 @@ type Config = {
   customerTrackingCopy: CustomerTrackingCopy;
 };
 
-const trackingCopyFields: Array<{ key: keyof CustomerTrackingCopy; label: string }> = [
-  { key: "unidentifiedHeadline", label: "Unidentified device headline" },
-  { key: "unidentifiedDetail", label: "Unidentified device detail" },
-  { key: "discrepancyHeadline", label: "Return discrepancy headline" },
-  { key: "discrepancyDetail", label: "Return discrepancy detail" },
-  { key: "blockedHeadline", label: "Fulfillment delay headline" },
-  { key: "blockedDetail", label: "Fulfillment delay detail" },
-  { key: "closedHeadline", label: "Completed request headline" },
-  { key: "closedDetail", label: "Completed request detail" },
-  { key: "dispatchedHeadline", label: "Replacement dispatched headline" },
-  { key: "dispatchedDetail", label: "Replacement dispatched detail" },
-  { key: "deliveredHeadline", label: "Replacement delivered headline" },
-  { key: "deliveredDetail", label: "Replacement delivered detail" },
-  { key: "returnTransitHeadline", label: "Return in transit headline" },
-  { key: "returnTransitDetail", label: "Return in transit detail" },
-  { key: "returnTransitRegularDetail", label: "Regular return in transit detail" },
-  { key: "verifiedHeadline", label: "Verified headline" },
-  { key: "verifiedAdvanceDetail", label: "Verified advance-replacement detail" },
-  { key: "verifiedRegularDetail", label: "Verified regular-replacement detail" },
-  { key: "returnReceivedHeadline", label: "Return received headline" },
-  { key: "returnReceivedDetail", label: "Return received detail" },
-  { key: "verificationHeadline", label: "Verification headline" },
-  { key: "verificationDetail", label: "Verification detail" },
+const trackingCopyGroups: Array<{ title: string; fields: Array<{ key: keyof CustomerTrackingCopy; label: string }> }> = [
+  { title: "Awaiting verification", fields: [{ key: "verificationHeadline", label: "Headline" }, { key: "verificationDetail", label: "Explanation" }] },
+  { title: "Verified request", fields: [{ key: "verifiedHeadline", label: "Headline" }, { key: "verifiedAdvanceDetail", label: "Advance replacement explanation" }, { key: "verifiedRegularDetail", label: "Regular replacement explanation" }] },
+  { title: "Return in transit", fields: [{ key: "returnTransitHeadline", label: "Headline" }, { key: "returnTransitDetail", label: "Advance replacement explanation" }, { key: "returnTransitRegularDetail", label: "Regular replacement explanation" }] },
+  { title: "Return received", fields: [{ key: "returnReceivedHeadline", label: "Headline" }, { key: "returnReceivedDetail", label: "Explanation" }] },
+  { title: "Replacement dispatched", fields: [{ key: "dispatchedHeadline", label: "Headline" }, { key: "dispatchedDetail", label: "Explanation" }] },
+  { title: "Replacement delivered", fields: [{ key: "deliveredHeadline", label: "Headline" }, { key: "deliveredDetail", label: "Explanation" }] },
+  { title: "Unidentified device", fields: [{ key: "unidentifiedHeadline", label: "Headline" }, { key: "unidentifiedDetail", label: "Explanation" }] },
+  { title: "Return discrepancy", fields: [{ key: "discrepancyHeadline", label: "Headline" }, { key: "discrepancyDetail", label: "Explanation" }] },
+  { title: "Fulfillment delay", fields: [{ key: "blockedHeadline", label: "Headline" }, { key: "blockedDetail", label: "Explanation" }] },
+  { title: "Completed request", fields: [{ key: "closedHeadline", label: "Headline" }, { key: "closedDetail", label: "Explanation" }] },
 ];
 
 type Process = {
@@ -76,8 +65,7 @@ export function AdminConfigForm({ config: initial, processTypes: initialProcesse
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...config, processTypes }),
       });
-      const responseText = await response.text();
-      const data = responseText ? JSON.parse(responseText) : {};
+      const data = await readJsonResponse<{ error?: string }>(response);
       if (!response.ok) throw new Error(data.error ?? "The settings could not be saved. Check the server log and try again.");
       setNotice("Settings saved. New workflow actions will use these values.");
     } catch (error) {
@@ -96,21 +84,12 @@ export function AdminConfigForm({ config: initial, processTypes: initialProcesse
         <div className="mt-6 space-y-3">
           <details open className="group rounded-2xl border border-black/10 bg-black/[.015]">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden">
-              <div><p className="font-semibold">Workflow defaults</p><p className="mt-1 text-sm text-black/50">How requests continue and when deposits can be refunded</p></div>
+              <div><p className="font-semibold">Deposit refunds</p><p className="mt-1 text-sm text-black/50">Choose when an advance-replacement deposit becomes refundable</p></div>
               <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rotate-45 border-b-2 border-r-2 border-black/50 transition-transform group-open:-rotate-[135deg]" />
             </summary>
-            <div className="grid gap-5 border-t border-black/10 bg-white px-5 py-5 sm:grid-cols-2">
-              <label className="flex flex-col text-sm font-semibold">
-                <span className="flex min-h-10 items-end">How new requests enter the workflow</span>
-                <div className="relative mt-2">
-                  <select disabled value="auto" className="h-11 w-full appearance-none rounded-xl border border-black/15 bg-black/[.04] px-3 pr-10">
-                    <option value="auto">Continue automatically</option>
-                  </select>
-                  <span aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 h-2 w-2 -translate-y-2/3 rotate-45 border-b-2 border-r-2 border-black/60" />
-                </div>
-              </label>
-              <label className="flex flex-col text-sm font-semibold">
-                <span className="flex min-h-10 items-end">When Support can refund an advance-replacement deposit</span>
+            <div className="border-t border-black/10 bg-white px-5 py-5">
+              <label className="flex max-w-xl flex-col text-sm font-semibold">
+                <span>Refund an advance-replacement deposit</span>
                 <div className="relative mt-2">
                   <select value={config.depositRefundGate} onChange={(event) => setConfig({ ...config, depositRefundGate: event.target.value })} className="h-11 w-full appearance-none truncate rounded-xl border border-black/15 bg-white px-3 pr-10">
                     <option value="return_in_transit">As soon as carrier tracking starts</option>
@@ -155,8 +134,16 @@ export function AdminConfigForm({ config: initial, processTypes: initialProcesse
               <div><p className="font-semibold">Customer tracking messages</p><p className="mt-1 text-sm text-black/50">Headlines and explanations shown on the secure request-status page</p></div>
               <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rotate-45 border-b-2 border-r-2 border-black/50 transition-transform group-open:-rotate-[135deg]" />
             </summary>
-            <div className="grid gap-4 border-t border-black/10 bg-white px-5 py-5 sm:grid-cols-2">
-              {trackingCopyFields.map((field) => <label key={field.key} className="block text-xs font-semibold">{field.label}<textarea rows={2} value={config.customerTrackingCopy[field.key]} onChange={(event) => setConfig({ ...config, customerTrackingCopy: { ...config.customerTrackingCopy, [field.key]: event.target.value } })} className="mt-1.5 w-full rounded-lg border border-black/15 p-3 text-sm font-normal" /></label>)}
+            <div className="space-y-3 border-t border-black/10 bg-white px-5 py-5">
+              {trackingCopyGroups.map((group) => <details key={group.title} className="group/message rounded-xl border border-black/10">
+                <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                  {group.title}
+                  <span aria-hidden="true" className="h-2 w-2 rotate-45 border-b-2 border-r-2 border-black/45 transition-transform group-open/message:-rotate-[135deg]" />
+                </summary>
+                <div className="grid gap-4 border-t border-black/10 p-4 sm:grid-cols-2">
+                  {group.fields.map((field) => <label key={field.key} className="block text-xs font-semibold">{field.label}<textarea rows={2} value={config.customerTrackingCopy[field.key]} onChange={(event) => setConfig({ ...config, customerTrackingCopy: { ...config.customerTrackingCopy, [field.key]: event.target.value } })} className="mt-1.5 w-full rounded-lg border border-black/15 p-3 text-sm font-normal" /></label>)}
+                </div>
+              </details>)}
             </div>
           </details>
         </div>
@@ -164,7 +151,7 @@ export function AdminConfigForm({ config: initial, processTypes: initialProcesse
 
       <section className="rounded-[1.5rem] border border-black/10 bg-white p-6 sm:p-8">
         <h2 className="text-xl font-semibold">Replacement options and customer charges</h2>
-        <p className="mt-2 text-sm leading-6 text-black/50">Open an option to change its availability, charges, or customer-facing description.</p>
+        <p className="mt-2 text-sm leading-6 text-black/50">Open an option to change its availability, charges, or customer-facing description. Price changes apply only to new requests; existing orders keep the amount originally quoted.</p>
         <div className="mt-5 space-y-4">
           {processTypes.map((process, index) => (
             <details key={process.id} className="group rounded-2xl border border-black/10 bg-black/[.015]">

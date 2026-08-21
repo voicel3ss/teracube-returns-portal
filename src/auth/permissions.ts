@@ -29,8 +29,8 @@ const teamPermissions: Record<StaffTeam, readonly Permission[]> = {
     "queue:assign",
     "oversight:view",
   ],
-  repair: ["repair:record", "repair:batch_ready", "shipment:receive", "queue:claim"],
-  logistics: ["shipment:receive", "shipment:dispatch", "shipment:upload_transfer_label", "queue:claim"],
+  repair: ["repair:record", "repair:batch_ready"],
+  logistics: ["shipment:receive", "shipment:dispatch", "shipment:upload_transfer_label"],
   admin: permissions,
 };
 

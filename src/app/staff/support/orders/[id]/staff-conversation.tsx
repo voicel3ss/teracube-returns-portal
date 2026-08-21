@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PhotoLightbox } from "@/components/photo-lightbox";
+import { readJsonResponse } from "@/lib/read-json-response";
 
 type Message = { id: string; senderKind: string; body: string; sentAt: string; photos: { id: string; name: string; dataUrl: string }[] };
 
@@ -10,16 +11,20 @@ export function StaffConversation({ orderId, messages: initialMessages, canReply
   const [reply, setReply] = useState("");
   const [busyAction, setBusyAction] = useState<"message" | "clarify" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const refreshInFlight = useRef(false);
 
   const refreshMessages = useCallback(async () => {
-    if (document.visibilityState === "hidden") return;
+    if (document.visibilityState === "hidden" || refreshInFlight.current) return;
+    refreshInFlight.current = true;
     try {
       const response = await fetch(`/api/staff/support/orders/${orderId}/review`, { cache: "no-store" });
       if (!response.ok) return;
-      const data = await response.json();
+      const data = await readJsonResponse<{ messages: Message[] }>(response);
       if (Array.isArray(data.messages)) setMessages(data.messages);
     } catch {
       // Keep the current conversation visible during a temporary connection failure.
+    } finally {
+      refreshInFlight.current = false;
     }
   }, [orderId]);
 
@@ -35,7 +40,7 @@ export function StaffConversation({ orderId, messages: initialMessages, canReply
     setError(null);
     try {
       const response = await fetch(`/api/staff/support/orders/${orderId}/review`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, message: reply }) });
-      const data = await response.json();
+      const data = await readJsonResponse<{ error?: string }>(response);
       if (!response.ok) throw new Error(data.error ?? "The message could not be sent.");
       setReply("");
       await refreshMessages();
@@ -66,6 +71,7 @@ export function StaffConversation({ orderId, messages: initialMessages, canReply
     </div>
     <div className="mt-4 rounded-2xl border border-black/10 p-4">
       <label htmlFor="staff-chat-reply" className="text-sm font-semibold">Message customer</label>
+      {!canReply ? <p className="mt-1 text-xs text-black/45">Claim the active work item before replying.</p> : null}
       <textarea id="staff-chat-reply" value={reply} onChange={(event) => setReply(event.target.value)} rows={3} disabled={!canReply} placeholder="Ask a question or send an update" className="mt-2 w-full resize-none rounded-xl border border-black/15 p-3 text-sm outline-none focus:border-[var(--green-strong)] disabled:bg-black/[0.03]" />
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-black/40">Send an update normally. Choose “Ask for reply” only when work must wait for the customer.</p>

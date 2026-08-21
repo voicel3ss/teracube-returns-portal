@@ -20,10 +20,11 @@ export async function findOrCreateCustomer(client: PrismaClient | Prisma.Transac
 
 export async function consolidateCustomerForDevice(
   client: Prisma.TransactionClient,
-  input: { email: string; serial: string },
+  input: { email: string; serial: string; anchorCustomerId?: string },
 ) {
   const normalized = input.email.trim().toLowerCase();
-  const [device, emailRecord] = await Promise.all([
+  const [anchorCustomer, device, emailRecord] = await Promise.all([
+    input.anchorCustomerId ? client.customer.findUnique({ where: { id: input.anchorCustomerId } }) : null,
     client.device.findUnique({ where: { serial: input.serial }, include: { currentOwner: true } }),
     client.customerEmail.findFirst({
       where: { normalized },
@@ -32,7 +33,7 @@ export async function consolidateCustomerForDevice(
     }),
   ]);
 
-  let survivor = device?.currentOwner ?? emailRecord?.customer ?? null;
+  let survivor = anchorCustomer ?? device?.currentOwner ?? emailRecord?.customer ?? null;
   if (survivor?.mergedIntoId) {
     survivor = await client.customer.findUnique({ where: { id: survivor.mergedIntoId } });
   }

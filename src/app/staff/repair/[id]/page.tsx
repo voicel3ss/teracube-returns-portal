@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getAuthorizedStaff } from "@/auth/staff-request";
+import { getStaffContext } from "@/auth/staff-request";
+import { hasPermission } from "@/auth/permissions";
+import { staffDestination } from "@/auth/staff-destination";
 import { prisma } from "@/db/prisma";
 import { PhotoLightbox } from "@/components/photo-lightbox";
 import { StaffShell } from "../../support/staff-shell";
@@ -9,8 +11,9 @@ import { RepairActions } from "./repair-actions";
 export const dynamic = "force-dynamic";
 
 export default async function RepairDetail({ params }: { params: Promise<{ id: string }> }) {
-  const staff = await getAuthorizedStaff("repair:record");
+  const staff = await getStaffContext();
   if (!staff) redirect("/staff/login");
+  if (!hasPermission(staff.teams, "repair:record")) redirect(staffDestination(staff.teams));
   const { id } = await params;
   const repair = await prisma.repair.findUnique({ where: { id }, include: { device: { include: { model: true, repairs: { include: { photos: true }, orderBy: { createdAt: "desc" } }, returnedForOrders: { orderBy: { createdAt: "desc" } }, dispatchedForOrders: { orderBy: { createdAt: "desc" } } } }, photos: true } });
   if (!repair) notFound();

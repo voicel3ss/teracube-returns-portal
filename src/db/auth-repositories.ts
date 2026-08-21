@@ -46,8 +46,12 @@ export class PrismaOtpRepository implements OtpRepository {
     await this.client.otpChallenge.update({ where: { id }, data: { failedAttempts: { increment: 1 } } });
   }
 
-  async consume(id: string, consumedAt: Date): Promise<void> {
-    await this.client.otpChallenge.update({ where: { id }, data: { consumedAt } });
+  async consume(id: string, consumedAt: Date): Promise<boolean> {
+    const consumed = await this.client.otpChallenge.updateMany({
+      where: { id, consumedAt: null },
+      data: { consumedAt },
+    });
+    return consumed.count === 1;
   }
 }
 

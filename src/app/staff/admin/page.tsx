@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getStaffContext } from "@/auth/staff-request";
 import { hasPermission, type StaffTeam } from "@/auth/permissions";
+import { staffDestination } from "@/auth/staff-destination";
 import { prisma } from "@/db/prisma";
 import { StaffShell } from "../support/staff-shell";
 import { AdminConfigForm } from "./admin-config-form";
@@ -12,11 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminPage() {
   const staff = await getStaffContext();
   if (!staff) redirect("/staff/login");
-  if (!hasPermission(staff.teams, "config:manage")) {
-    if (hasPermission(staff.teams, "oversight:view")) redirect("/staff/oversight");
-    if (hasPermission(staff.teams, "order:view_all")) redirect("/staff/support");
-    redirect("/staff/login");
-  }
+  if (!hasPermission(staff.teams, "config:manage")) redirect(staffDestination(staff.teams));
   const [config, processTypes, users] = await Promise.all([
     prisma.appConfig.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } }),
     prisma.processType.findMany({ orderBy: [{ flow: "asc" }, { name: "asc" }] }),

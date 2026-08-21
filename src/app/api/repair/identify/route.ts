@@ -22,7 +22,7 @@ const identifySchema = z
   });
 
 export async function POST(request: Request) {
-  const parsed = identifySchema.safeParse(await request.json());
+  const parsed = identifySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid lookup." }, { status: 400 });
   }
@@ -64,7 +64,11 @@ export async function POST(request: Request) {
     });
     if (activeOrder) {
       const customer = await prisma.$transaction((transaction) =>
-        consolidateCustomerForDevice(transaction, { email: verifiedParentEmail, serial: serial.value.serial }),
+        consolidateCustomerForDevice(transaction, {
+          email: verifiedParentEmail,
+          serial: serial.value.serial,
+          anchorCustomerId: activeOrder.customerId,
+        }),
       );
       const access = await new CustomerTokenService(new PrismaCustomerTokenRepository(prisma)).issue({
         customerId: customer.id,

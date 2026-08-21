@@ -7,10 +7,26 @@ import { getCustomerTrackingView } from "@/domain/customer-tracking";
 import { resolveCustomerTrackingCopy } from "@/domain/customer-tracking-copy";
 import { CustomerConversation } from "./customer-conversation";
 import { PaymentDue } from "./payment-due";
+import { canPayOutstandingBalance } from "@/domain/customer-payment";
+import { ShippingAddressDue } from "./shipping-address-due";
+import { outstandingBalanceInCents } from "@/domain/order-pricing";
 
 export const dynamic = "force-dynamic";
 
 const milestones = ["Request confirmed", "Verification", "Shipping", "Complete"];
+
+function TrackingUnavailable() {
+  return (
+    <main className="min-h-screen bg-[#f7f8f5]">
+      <BrandHeader quietLabel="Request tracking" />
+      <div className="mx-auto max-w-xl px-5 py-20 text-center">
+        <h1 className="text-3xl font-semibold tracking-[-0.035em]">This tracking link isn’t available.</h1>
+        <p className="mt-4 leading-7 text-black/55">It may have expired or been replaced. Contact support for a fresh link.</p>
+        <Link href="/repair/start" className="mt-7 inline-flex rounded-xl bg-black px-6 py-3 font-semibold text-white">Start a new request</Link>
+      </div>
+    </main>
+  );
+}
 
 export default async function TrackingPage({
   searchParams,
@@ -21,18 +37,7 @@ export default async function TrackingPage({
   const token = typeof params.token === "string" ? params.token : "";
   const access = await new CustomerTokenService(new PrismaCustomerTokenRepository(prisma)).authenticate(token);
 
-  if (!access) {
-    return (
-      <main className="min-h-screen bg-[#f7f8f5]">
-        <BrandHeader quietLabel="Request tracking" />
-        <div className="mx-auto max-w-xl px-5 py-20 text-center">
-          <h1 className="text-3xl font-semibold tracking-[-0.035em]">This tracking link isn’t available.</h1>
-          <p className="mt-4 leading-7 text-black/55">It may have expired or been replaced. Contact support for a fresh link.</p>
-          <Link href="/repair/start" className="mt-7 inline-flex rounded-xl bg-black px-6 py-3 font-semibold text-white">Start a new request</Link>
-        </div>
-      </main>
-    );
-  }
+  if (!access) return <TrackingUnavailable />;
 
   const [order, config] = await Promise.all([prisma.replacementOrder.findFirst({
     where: { id: access.replacementOrderId, customerId: access.customerId },
@@ -44,13 +49,14 @@ export default async function TrackingPage({
     },
   }), prisma.appConfig.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } })]);
 
-  if (!order) return null;
+  if (!order) return <TrackingUnavailable />;
   const inboundShipment = [...order.shipments].reverse().find((shipment) => shipment.type === "inbound");
   const outboundShipment = [...order.shipments].reverse().find((shipment) => shipment.type === "outbound");
   const view = getCustomerTrackingView(order.status, order.processType?.flow, { inboundStatus: inboundShipment?.status, outboundStatus: outboundShipment?.status }, order.reviewState, resolveCustomerTrackingCopy(config.customerTrackingCopy));
   const returnComplete = inboundShipment?.status === "received" || order.status === "closed";
   const labelReady = Boolean(inboundShipment && ["label_ready", "in_transit", "delivered"].includes(inboundShipment.status));
-  const balanceDueInCents = order.processType ? Math.max(0, order.processType.feeInCents + order.processType.depositInCents - order.amountPaidInCents) : 0;
+  const balanceDueInCents = order.processType ? outstandingBalanceInCents(order) : 0;
+  const canPayBalance = canPayOutstandingBalance({ status: order.status, reviewState: order.reviewState, balanceInCents: balanceDueInCents });
   const messages = order.messages.map((message) => ({ id: message.id, senderKind: message.senderKind, body: message.body, sentAt: message.createdAt.toISOString(), photos: message.attachments.map((photo) => ({ id: photo.id, name: photo.filename, dataUrl: `data:${photo.contentType};base64,${Buffer.from(photo.data).toString("base64")}` })) }));
 
   return (
@@ -65,7 +71,8 @@ export default async function TrackingPage({
           </div>
 
           <div className="border-t border-black/10 p-7 sm:p-10">
-            {balanceDueInCents > 0 ? <PaymentDue token={token} balanceInCents={balanceDueInCents} /> : null}
+            {!order.encryptedShippingAddress && order.returnedDeviceSerial ? <ShippingAddressDue token={token} /> : null}
+            {canPayBalance ? <PaymentDue token={token} balanceInCents={balanceDueInCents} /> : null}
             <CustomerConversation token={token} messages={messages} />
 
             <ol className="grid grid-cols-4 gap-2">

@@ -13,14 +13,21 @@ Open `/staff/login`, enter `support@myteracube.com`, and submit the one-time cod
 - Claimed work can be snoozed for 1, 3, or 7 days with a note.
 - Reassigning another agent's item requires a note and is audited.
 - Search accepts replacement order number, device serial, or customer email. Results and customer records show masked parent emails; Repair and Logistics never receive parent email data.
+- Unsolicited parent replies appear as **Customer message** work. Sending a normal reply completes that item. Asking for a reply pauses the current task, and the same task reopens automatically when the parent answers; unrelated work is not discarded.
 
 ## Claim verification
 
 The review state is the shipping-label gate. Support records its verified fault and confirms warranty versus accidental coverage. Paid accidental damage must use the configured paid process. A zero-dollar accidental-damage outcome requires a valid protection-plan or courtesy exception; it cannot be released accidentally. Clarification is handled in the order's live secure conversation, where the parent can answer and attach photos.
 
+Unidentified requests have a dedicated **Identify device** action. Support attaches a known serial, selects its coverage and replacement path, and the request then moves into the normal verification gate. If the parent could not supply a shipping address during intake, the secure tracking page asks for it before Support can release the request.
+
+When Logistics records a returned serial that differs from the expected device, Support receives a dedicated **Resolve return discrepancy** action. Support can continue with a free, paid, or upgrade replacement, or close the request without a replacement. Resolving it completes the discrepancy work item and records the decision in the customer conversation and audit trail.
+
+Inventory and carrier failures create a separate **Resolve fulfillment block** action. Support can retry the current replacement, choose a different customer outcome, or close the request. Resolution resumes from the physical shipment progress already recorded and completes the blocked-work item.
+
 ## Customer records
 
-Support can search customer records by email or device serial. The device is the identity anchor: if another email tries to start a second active request for the same serial, intake stops immediately and explains that a request is already in progress. Any verified alternate email association is handled automatically; there is no manual merge control.
+Support can search customer records by email or device serial, including devices associated through previous or current orders even when the device has no current owner assigned. The device is the identity anchor: if another email tries to start a second active request for the same serial, intake stops immediately and explains that a request is already in progress. Any verified alternate email association is handled automatically; there is no manual merge control.
 
 ## Refunds and customer links
 

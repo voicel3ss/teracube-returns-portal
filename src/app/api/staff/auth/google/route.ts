@@ -10,7 +10,7 @@ import { prisma } from "@/db/prisma";
 const schema = z.object({ credential: z.string().min(100).max(10000) });
 
 export async function POST(request: Request) {
-  const parsed = schema.safeParse(await request.json());
+  const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Google sign-in could not be verified." }, { status: 400 });
   const clientId = process.env.GOOGLE_STAFF_OAUTH_CLIENT_ID;
   if (!clientId || clientId.startsWith("replace-with")) return Response.json({ error: "Google staff sign-in is not configured." }, { status: 503 });

@@ -12,7 +12,7 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const parsed = schema.safeParse(await request.json());
+  const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Enter the six-digit verification code." }, { status: 400 });
 
   const secret = process.env.AUTH_TOKEN_SECRET;

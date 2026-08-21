@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { readJsonResponse } from "@/lib/read-json-response";
 
 export function PaymentDue({ token, balanceInCents }: { token: string; balanceInCents: number }) {
   const router = useRouter();
@@ -13,7 +14,7 @@ export function PaymentDue({ token, balanceInCents }: { token: string; balanceIn
     setError(null);
     try {
       const response = await fetch("/api/repair/payment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
-      const data = await response.json();
+      const data = await readJsonResponse<{ error?: string }>(response);
       if (!response.ok) throw new Error(data.error ?? "Payment could not be completed.");
       router.refresh();
     } catch (caught) {

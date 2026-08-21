@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { readJsonResponse } from "@/lib/read-json-response";
 
 const teamOptions = ["support", "ops_lead", "repair", "logistics", "admin"] as const;
 type Team = (typeof teamOptions)[number];
@@ -23,8 +24,7 @@ export function StaffAccountsForm({ accounts, currentStaffId }: { accounts: Acco
     setBusy(true); setNotice(null);
     try {
       const response = await fetch("/api/staff/admin/users", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const responseText = await response.text();
-      const data = responseText ? JSON.parse(responseText) : {};
+      const data = await readJsonResponse<{ error?: string }>(response);
       if (!response.ok) throw new Error(data.error ?? "The staff account could not be saved.");
       setNotice("Staff account saved.");
       if (method === "POST") { setEmail(""); setDisplayName(""); setTeams(["support"]); }

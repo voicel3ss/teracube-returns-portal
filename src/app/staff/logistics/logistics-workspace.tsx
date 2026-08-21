@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PiiField } from "@/components/pii-field";
+import { isDifferentReplacementUnit } from "@/domain/replacement-unit";
+import { readJsonResponse } from "@/lib/read-json-response";
 
 type Order = { id: string; orderNumber: number; model: string; flow: string; status: string; customerSince: string; priorOrderCount: number; returnedSerial: string | null; repairHistory: Array<{ status: string; resolution: string | null }> };
 type Stock = { serial: string; model: string; grade: "new" | "refurbished" };
@@ -36,9 +38,14 @@ export function LogisticsWorkspace({ orders, stock, transfers, pendingOutbound }
     setMessage(null);
     try {
       const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const data = await response.json();
+      const data = await readJsonResponse<{ error?: string; result?: string }>(response);
       if (!response.ok) throw new Error(data.error ?? "Action failed.");
-      setMessage(data.result ? `Package recorded: ${data.result}.` : "Shipment updated.");
+      if (action === "receipt") setMessage(data.result === "matched" ? "Inbound package received. The serial matched." : "Inbound package received with a discrepancy for Support to review.");
+      else if (action === "dispatch") setMessage("Replacement dispatched.");
+      else if (action.startsWith("internal:")) setMessage(data.result === "matched" ? "Repair batch received. All serials matched." : "Repair batch recorded with a serial mismatch.");
+      else if (action.startsWith("upload:")) setMessage("Transfer label attached.");
+      else if (action.startsWith("allocate:")) setMessage("Shopify fulfillment completed with its serial and tracking number.");
+      else setMessage("Shipment updated.");
       if (action === "receipt") {
         setTracking("");
         setPresent(true);
@@ -75,10 +82,25 @@ export function LogisticsWorkspace({ orders, stock, transfers, pendingOutbound }
     await post(`upload:${shipmentId}`, "/api/staff/logistics/transfer-label", { shipmentId, filename: file.name, contentType: file.type, data });
   }
 
+  function recordReceipt() {
+    const trackingNumber = (trackingInput.current?.value ?? tracking).trim();
+    const observedSerial = (observedInput.current?.value ?? observed).trim();
+    if (!trackingNumber) {
+      setError("Scan or enter the carrier tracking barcode.");
+      return;
+    }
+    if (present && !observedSerial) {
+      setError("Scan the device serial, or uncheck “Device is inside” for an empty package.");
+      return;
+    }
+    void post("receipt", "/api/staff/logistics/receive", { trackingNumber, contentsPresent: present, observedSerial, notes });
+  }
+
   const receiving = busyAction === "receipt";
+  const receiptIncomplete = !tracking.trim() || (present && !observed.trim());
   const dispatching = busyAction === "dispatch";
   const selectedOrder = orders.find((order) => order.id === orderId);
-  const availableStock = stock.filter((device) => device.grade === unitGrade && (!selectedOrder || device.model === selectedOrder.model));
+  const availableStock = stock.filter((device) => device.grade === unitGrade && (!selectedOrder || (device.model === selectedOrder.model && isDifferentReplacementUnit(selectedOrder.returnedSerial, device.serial))));
 
   return (
     <div className="grid gap-5 xl:grid-cols-3">
@@ -89,30 +111,46 @@ export function LogisticsWorkspace({ orders, stock, transfers, pendingOutbound }
         <label className="mt-4 flex items-center gap-3 text-sm font-semibold"><input type="checkbox" checked={present} onChange={(event) => setPresent(event.target.checked)} className="size-4" />Device is inside</label>
         {present ? <label className="mt-4 block text-sm font-semibold">Observed device serial<input ref={observedInput} value={observed} onChange={(event) => setObserved(event.target.value.toUpperCase())} placeholder="202112T2E235968" className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3 font-mono text-sm" /></label> : null}
         <label className="mt-4 block text-sm font-semibold">Contents notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm" /></label>
-        <button onClick={() => post("receipt", "/api/staff/logistics/receive", { trackingNumber: trackingInput.current?.value ?? tracking, contentsPresent: present, observedSerial: observedInput.current?.value ?? observed, notes })} disabled={receiving || !tracking.trim() || (present && !observed.trim())} className="mt-4 h-11 w-full cursor-pointer rounded-xl bg-black text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">{receiving ? "Recording receipt…" : "Record receipt"}</button>
+        <button onClick={recordReceipt} disabled={receiving || receiptIncomplete} className="mt-4 h-11 w-full cursor-pointer rounded-xl bg-black text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">{receiving ? "Recording receipt…" : "Record receipt"}</button>
+        {receiptIncomplete ? <p className="mt-2 text-xs leading-5 text-black/45">Enter the tracking barcode{present ? " and scan the device serial" : ""} to record this package.</p> : null}
       </section>
 
       <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
         <p className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--green-strong)]">Outbound replacement</p>
         <h2 className="mt-2 text-xl font-semibold">Dispatch a replacement</h2>
         <label className="mt-5 block text-sm font-semibold">Ready order<select value={orderId} onChange={(event) => setOrderId(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3 text-sm"><option value="">Select an order</option>{orders.map((order) => <option key={order.id} value={order.id}>#{String(order.orderNumber).padStart(4, "0")} · {order.model} · {order.flow}</option>)}</select></label>
-        {selectedOrder ? <div className="mt-3 rounded-xl bg-black/[.035] p-3 text-xs leading-5 text-black/60"><p><span className="font-semibold text-black/75">Returned serial:</span> {selectedOrder.returnedSerial ?? "Not identified"}</p><p><span className="font-semibold text-black/75">Customer since:</span> {new Date(selectedOrder.customerSince).toLocaleDateString("en-US")} · {selectedOrder.priorOrderCount} prior request{selectedOrder.priorOrderCount === 1 ? "" : "s"}</p><p><span className="font-semibold text-black/75">Repair history:</span> {selectedOrder.repairHistory.length ? selectedOrder.repairHistory.map((repair) => repair.resolution ?? repair.status.replaceAll("_", " ")).join("; ") : "No prior repairs recorded"}</p><p><span className="font-semibold text-black/75">Ship to:</span> <PiiField orderId={selectedOrder.id} field="parent_address" masked="••••••••" /></p></div> : null}
-        <label className="mt-4 block text-sm font-semibold">Replacement condition<select value={unitGrade} onChange={(event) => { setUnitGrade(event.target.value as "new" | "refurbished"); setSerial(""); }} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3 text-sm"><option value="refurbished">Refurbished</option><option value="new">New</option></select></label>
-        <label className="mt-4 block text-sm font-semibold">Assigned serial <span className="font-normal text-black/45">{fulfillmentType === "shopify_auto" ? "(optional until allocated)" : "(required)"}</span><select value={serial} onChange={(event) => setSerial(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3 font-mono text-sm"><option value="">{fulfillmentType === "shopify_auto" ? "Assign later" : "Select stock"}</option>{availableStock.map((device) => <option key={device.serial} value={device.serial}>{device.serial} · {device.model}</option>)}</select></label>
-        <label className="mt-4 block text-sm font-semibold">Fulfillment<select value={fulfillmentType} onChange={(event) => setFulfillmentType(event.target.value as "manual" | "shopify_auto")} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3"><option value="manual">Manual</option><option value="shopify_auto">Shopify automatic</option></select></label>
-        {fulfillmentType === "manual" ? <div className="mt-4 grid grid-cols-2 gap-3"><label className="text-sm font-semibold">Carrier<input value={carrier} onChange={(event) => setCarrier(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3" /></label><label className="text-sm font-semibold">Tracking<input value={outboundTracking} onChange={(event) => setOutboundTracking(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3" /></label></div> : <p className="mt-3 rounded-xl bg-[#87F5CB]/25 p-3 text-xs leading-5 text-black/65">Shopify creates the fulfillment now. A serial and tracking number can be attached later when Shopify allocates the package.</p>}
-        <button onClick={() => post("dispatch", "/api/staff/logistics/dispatch", { orderId, serial, unitGrade, carrier, trackingNumber: outboundTracking, fulfillmentType })} disabled={dispatching || !orderId || (fulfillmentType === "manual" && (!serial || !carrier.trim() || !outboundTracking.trim()))} className="mt-4 h-11 w-full cursor-pointer rounded-xl bg-black text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">{dispatching ? "Confirming dispatch…" : fulfillmentType === "shopify_auto" ? "Create Shopify fulfillment" : "Confirm dispatch"}</button>
+        {!orders.length ? <p className="mt-4 rounded-xl bg-black/[.035] p-4 text-sm leading-6 text-black/55">No verified requests are ready to dispatch.</p> : !selectedOrder ? <p className="mt-3 text-xs leading-5 text-black/45">Choose an order to see its device, shipping, and fulfillment fields.</p> : <>
+          <div className="mt-3 rounded-xl bg-black/[.035] p-3 text-xs leading-5 text-black/60"><p><span className="font-semibold text-black/75">Returned serial:</span> {selectedOrder.returnedSerial ?? "Not identified"}</p><p><span className="font-semibold text-black/75">Customer since:</span> {new Date(selectedOrder.customerSince).toLocaleDateString("en-US")} · {selectedOrder.priorOrderCount} prior request{selectedOrder.priorOrderCount === 1 ? "" : "s"}</p><p><span className="font-semibold text-black/75">Repair history:</span> {selectedOrder.repairHistory.length ? selectedOrder.repairHistory.map((repair) => repair.resolution ?? repair.status.replaceAll("_", " ")).join("; ") : "No prior repairs recorded"}</p><p><span className="font-semibold text-black/75">Ship to:</span> <PiiField orderId={selectedOrder.id} field="parent_address" masked="••••••••" /></p></div>
+          <label className="mt-4 block text-sm font-semibold">Replacement condition<select value={unitGrade} onChange={(event) => { setUnitGrade(event.target.value as "new" | "refurbished"); setSerial(""); }} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3 text-sm"><option value="refurbished">Refurbished</option><option value="new">New</option></select></label>
+          <label className="mt-4 block text-sm font-semibold">Assigned serial <span className="font-normal text-black/45">{fulfillmentType === "shopify_auto" ? "(optional until allocated)" : "(required)"}</span><select value={serial} onChange={(event) => setSerial(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3 font-mono text-sm"><option value="">{fulfillmentType === "shopify_auto" ? "Assign later" : "Select stock"}</option>{availableStock.map((device) => <option key={device.serial} value={device.serial}>{device.serial} · {device.model}</option>)}</select></label>
+          <label className="mt-4 block text-sm font-semibold">Fulfillment<select value={fulfillmentType} onChange={(event) => setFulfillmentType(event.target.value as "manual" | "shopify_auto")} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3"><option value="manual">Manual</option><option value="shopify_auto">Shopify automatic</option></select></label>
+          {fulfillmentType === "manual" ? <div className="mt-4 grid grid-cols-2 gap-3"><label className="text-sm font-semibold">Carrier<input value={carrier} onChange={(event) => setCarrier(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3" /></label><label className="text-sm font-semibold">Tracking<input value={outboundTracking} onChange={(event) => setOutboundTracking(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3" /></label></div> : <p className="mt-3 rounded-xl bg-[#87F5CB]/25 p-3 text-xs leading-5 text-black/65">Shopify creates the fulfillment now. A serial and tracking number can be attached later when Shopify allocates the package.</p>}
+          <button onClick={() => post("dispatch", "/api/staff/logistics/dispatch", { orderId, serial, unitGrade, carrier, trackingNumber: outboundTracking, fulfillmentType })} disabled={dispatching || (fulfillmentType === "manual" && (!serial || !carrier.trim() || !outboundTracking.trim()))} className="mt-4 h-11 w-full cursor-pointer rounded-xl bg-black text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">{dispatching ? "Confirming dispatch…" : fulfillmentType === "shopify_auto" ? "Create Shopify fulfillment" : "Confirm dispatch"}</button>
+        </>}
       </section>
 
       <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
         <p className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--green-strong)]">Internal transfers</p>
-        <h2 className="mt-2 text-xl font-semibold">Attach warehouse labels</h2>
-        <p className="mt-2 text-sm text-black/50">Repair batches remain traceable by their exact serial list.</p>
+        <h2 className="mt-2 text-xl font-semibold">Receive repaired devices</h2>
+        <p className="mt-2 text-sm leading-6 text-black/50">Scan the devices that arrived from Repair, then confirm the batch. Labels and notes are optional.</p>
         <div className="mt-5 divide-y divide-black/10">{transfers.map((transfer) => {
           const uploading = busyAction === `upload:${transfer.id}`;
           const receivingTransfer = busyAction === `internal:${transfer.id}`;
           const input = transferInputs[transfer.id] ?? { serials: transfer.observedSerials.join("\n"), notes: "" };
-          return <div key={transfer.id} className="py-4"><div className="flex justify-between gap-3"><p className="font-mono text-xs font-semibold">{transfer.id.slice(0, 8)}</p><span className="text-xs capitalize text-black/45">{transfer.status.replaceAll("_", " ")}</span></div><p className="mt-2 text-sm font-semibold text-black/65">Expected serials ({transfer.serials.length})</p><p className="mt-1 break-all font-mono text-xs leading-5 text-black/45">{transfer.serials.join(", ")}</p><label className={`mt-3 inline-flex rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold ${uploading ? "cursor-wait opacity-45" : "cursor-pointer hover:bg-black/[.03]"}`}>{uploading ? "Uploading label…" : transfer.labelFilename ?? "Choose label file"}<input type="file" accept="application/pdf,image/png,image/jpeg" disabled={uploading} className="sr-only" onChange={(event) => uploadLabel(transfer.id, event.target.files?.[0])} /></label><label className="mt-4 block text-xs font-semibold">Observed serials, one per line<textarea rows={3} value={input.serials} onChange={(event) => setTransferInputs((current) => ({ ...current, [transfer.id]: { ...input, serials: event.target.value.toUpperCase() } }))} className="mt-1.5 w-full rounded-lg border border-black/15 p-3 font-mono text-xs" /></label><label className="mt-3 block text-xs font-semibold">Warehouse notes<input value={input.notes} onChange={(event) => setTransferInputs((current) => ({ ...current, [transfer.id]: { ...input, notes: event.target.value } }))} className="mt-1.5 h-10 w-full rounded-lg border border-black/15 px-3 text-sm" /></label><button onClick={() => post(`internal:${transfer.id}`, "/api/staff/logistics/internal-receive", { shipmentId: transfer.id, observedSerials: input.serials.split(/[\n,]+/).map((value) => value.trim()).filter(Boolean), notes: input.notes })} disabled={receivingTransfer || !input.serials.trim()} className="mt-3 h-10 w-full cursor-pointer rounded-lg bg-black text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">{receivingTransfer ? "Reconciling…" : transfer.status === "exception" ? "Recheck warehouse receipt" : "Record warehouse receipt"}</button></div>;
+          return <div key={transfer.id} className="py-4">
+            <div className="flex justify-between gap-3"><p className="font-mono text-xs font-semibold">Batch {transfer.id.slice(0, 8)}</p><span className="text-xs capitalize text-black/45">{transfer.status.replaceAll("_", " ")}</span></div>
+            <p className="mt-3 text-sm font-semibold text-black/65">Expected devices ({transfer.serials.length})</p>
+            <p className="mt-1 break-all rounded-lg bg-black/[.035] p-3 font-mono text-xs leading-5 text-black/55">{transfer.serials.join("\n")}</p>
+            <label className="mt-4 block text-xs font-semibold">Scan received serials, one per line<textarea rows={3} value={input.serials} onChange={(event) => setTransferInputs((current) => ({ ...current, [transfer.id]: { ...input, serials: event.target.value.toUpperCase() } }))} placeholder="Scan each device in the box" className="mt-1.5 w-full rounded-lg border border-black/15 p-3 font-mono text-xs" /></label>
+            <details className="group/optional mt-3 rounded-lg border border-black/10">
+              <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-xs font-semibold text-black/55 [&::-webkit-details-marker]:hidden">Add label or notes (optional)<span aria-hidden="true" className="h-2 w-2 rotate-45 border-b-2 border-r-2 border-black/40 transition-transform group-open/optional:-rotate-[135deg]" /></summary>
+              <div className="border-t border-black/10 p-3">
+                <label className={`inline-flex rounded-lg border border-black/15 px-3 py-2 text-xs font-semibold ${uploading ? "cursor-wait opacity-45" : "cursor-pointer hover:bg-black/[.03]"}`}>{uploading ? "Uploading label…" : transfer.labelFilename ?? "Choose label file"}<input type="file" accept="application/pdf,image/png,image/jpeg" disabled={uploading} className="sr-only" onChange={(event) => uploadLabel(transfer.id, event.target.files?.[0])} /></label>
+                <label className="mt-3 block text-xs font-semibold">Warehouse notes<input value={input.notes} onChange={(event) => setTransferInputs((current) => ({ ...current, [transfer.id]: { ...input, notes: event.target.value } }))} className="mt-1.5 h-10 w-full rounded-lg border border-black/15 px-3 text-sm" /></label>
+              </div>
+            </details>
+            <button onClick={() => post(`internal:${transfer.id}`, "/api/staff/logistics/internal-receive", { shipmentId: transfer.id, observedSerials: input.serials.split(/[\n,]+/).map((value) => value.trim()).filter(Boolean), notes: input.notes })} disabled={receivingTransfer || !input.serials.trim()} className="mt-3 h-10 w-full cursor-pointer rounded-lg bg-black text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">{receivingTransfer ? "Checking batch…" : transfer.status === "exception" ? "Recheck batch contents" : "Confirm batch contents"}</button>
+          </div>;
         })}{!transfers.length ? <p className="py-8 text-center text-sm text-black/40">No repair batches are waiting for transfer.</p> : null}</div>
       </section>
 

@@ -2,13 +2,20 @@ import { z } from "zod";
 import { CustomerTokenService } from "@/auth/customer-token";
 import { PrismaCustomerTokenRepository } from "@/db/auth-repositories";
 import { prisma } from "@/db/prisma";
+import { decodePhotoUploads, PhotoUploadError } from "@/lib/photo-upload";
 
 const photoSchema = z.object({
   name: z.string().trim().min(1).max(200),
   type: z.enum(["image/jpeg", "image/png", "image/webp"]),
   data: z.string().max(7_000_000),
 });
-const schema = z.object({ token: z.string().min(1), message: z.string().trim().min(2).max(2000), photos: z.array(photoSchema).max(3).default([]) });
+const schema = z.object({
+  token: z.string().min(1),
+  message: z.string().trim().max(2000).optional().default(""),
+  photos: z.array(photoSchema).max(3).default([]),
+}).superRefine((value, context) => {
+  if (value.message.length < 2 && value.photos.length === 0) context.addIssue({ code: "custom", message: "Type a reply or attach a photo." });
+});
 
 export async function GET(request: Request) {
   const token = new URL(request.url).searchParams.get("token") ?? "";
@@ -29,7 +36,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const parsed = schema.safeParse(await request.json());
+  const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid reply." }, { status: 400 });
   const access = await new CustomerTokenService(new PrismaCustomerTokenRepository(prisma)).authenticate(parsed.data.token);
   if (!access) return Response.json({ error: "This secure link is invalid or expired." }, { status: 401 });
@@ -43,13 +50,15 @@ export async function POST(request: Request) {
   });
   if (!order) return Response.json({ error: "Request not found." }, { status: 404 });
 
-  const attachments = parsed.data.photos.map((photo) => {
-    const data = Buffer.from(photo.data, "base64");
-    if (data.byteLength > 5_000_000) throw new Error("Each photo must be 5 MB or smaller.");
-    return { filename: photo.name, contentType: photo.type, byteSize: data.byteLength, data };
-  });
+  let attachments;
+  try {
+    attachments = decodePhotoUploads(parsed.data.photos);
+  } catch (error) {
+    if (error instanceof PhotoUploadError) return Response.json({ error: error.message }, { status: 400 });
+    throw error;
+  }
   await prisma.$transaction(async (tx) => {
-    await tx.conversationMessage.create({ data: { replacementOrderId: access.replacementOrderId, senderKind: "customer", body: parsed.data.message, attachments: { create: attachments } } });
+    await tx.conversationMessage.create({ data: { replacementOrderId: access.replacementOrderId, senderKind: "customer", body: parsed.data.message || "Photo attached.", attachments: { create: attachments } } });
 
     // A reply only advances a claim that was explicitly waiting on clarification.
     // Routine customer messages must not reopen a reviewed verification gate.
@@ -59,20 +68,24 @@ export async function POST(request: Request) {
 
     if (order.workItems.length > 0) {
       await tx.workItem.updateMany({
-        where: { replacementOrderId: access.replacementOrderId, team: "support", status: { not: "completed" } },
-        data: { lastActivityAt: new Date(), snoozedUntil: null },
+        where: { replacementOrderId: access.replacementOrderId, team: "support", status: { not: "completed" }, assignedToStaffId: { not: null } },
+        data: { status: "claimed", lastActivityAt: new Date(), snoozedUntil: null },
+      });
+      await tx.workItem.updateMany({
+        where: { replacementOrderId: access.replacementOrderId, team: "support", status: { not: "completed" }, assignedToStaffId: null },
+        data: { status: "open", lastActivityAt: new Date(), snoozedUntil: null },
       });
       if (order.reviewState === "needs_clarification") {
         await tx.workItem.updateMany({
           where: { replacementOrderId: access.replacementOrderId, team: "support", kind: "needs_clarification", status: { not: "completed" } },
-          data: { status: "open", snoozedUntil: null, lastActivityAt: new Date() },
+          data: { snoozedUntil: null, lastActivityAt: new Date() },
         });
       }
     } else {
       await tx.workItem.upsert({
-        where: { replacementOrderId_kind: { replacementOrderId: access.replacementOrderId, kind: "needs_clarification" } },
+        where: { replacementOrderId_kind: { replacementOrderId: access.replacementOrderId, kind: "customer_message" } },
         update: { status: "open", assignedToStaffId: null, snoozedUntil: null, lastActivityAt: new Date() },
-        create: { replacementOrderId: access.replacementOrderId, team: "support", kind: "needs_clarification", status: "open" },
+        create: { replacementOrderId: access.replacementOrderId, team: "support", kind: "customer_message", status: "open" },
       });
     }
 
