@@ -4,14 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { readJsonResponse } from "@/lib/read-json-response";
 
-type WorkItem = { id: string; status: string; assignedToStaffId: string | null; assignedToName: string | null; snoozedUntil: string | null };
+type WorkItem = { id: string; status: string; assignedToStaffId: string | null; assignedToName: string | null; pauseReason: "customer_approval" | "admin_review" | null };
 
-export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, canAssign, assignableStaff, reviewState, initialFault, coverage, resolution: initialResolution, requiresFreeReason, refundableDepositInCents, refundEligible, refundGate, refundOwnedByMe }: {
+export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, canAssign, canCompleteAdminReview, assignableStaff, reviewState, initialFault, coverage, resolution: initialResolution, requiresFreeReason, refundableDepositInCents, refundEligible, refundGate, refundOwnedByMe }: {
   orderId: string;
   orderStatus: string;
   workItem: WorkItem | null;
   staffId: string;
   canAssign: boolean;
+  canCompleteAdminReview: boolean;
   assignableStaff: Array<{ id: string; displayName: string }>;
   reviewState: string;
   initialFault: string;
@@ -40,6 +41,7 @@ export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, c
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mine = workItem?.assignedToStaffId === staffId;
+  const adminReviewLocked = workItem?.status === "snoozed" && workItem.pauseReason === "admin_review" && !canCompleteAdminReview;
   const accidentalFreeOutcome = requiresFreeReason && confirmedCoverage === "accident";
   const submittedFreeReason = accidentalFreeOutcome
     ? accidentalFreeBasis === "plan"
@@ -79,12 +81,12 @@ export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, c
 
   return (
     <div className="sticky top-5 space-y-4">
-      {workItem && mine && workItem.status === "snoozed" ? <section className="rounded-[1.5rem] border border-blue-200 bg-blue-50 p-6">
-        <h2 className="font-semibold text-blue-950">Request paused</h2>
-        <p className="mt-2 text-sm leading-6 text-blue-950/65">{workItem.snoozedUntil ? `Scheduled to return to the queue ${new Date(workItem.snoozedUntil).toLocaleString()}.` : "This item is temporarily out of the active queue."}</p>
-        <button type="button" onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "resume" })} disabled={busy} className="mt-4 h-10 w-full cursor-pointer rounded-xl bg-blue-950 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">Resume now</button>
+      {workItem && (mine || canAssign) && workItem.status === "snoozed" ? <section className="rounded-[1.5rem] border border-blue-200 bg-blue-50 p-6">
+        <h2 className="font-semibold text-blue-950">{workItem.pauseReason === "admin_review" ? "Waiting for admin review" : "Waiting for customer approval"}</h2>
+        <p className="mt-2 text-sm leading-6 text-blue-950/65">{workItem.pauseReason === "admin_review" ? "This stays paused until an Admin completes the review and resumes it." : "This returns to active work automatically when the customer replies on their request page."}</p>
+        {workItem.pauseReason !== "admin_review" || canCompleteAdminReview ? <button type="button" onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "resume" })} disabled={busy} className="mt-4 h-10 w-full cursor-pointer rounded-xl bg-blue-950 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">Resume now</button> : <p className="mt-4 rounded-xl bg-white/70 px-3 py-2 text-center text-xs font-semibold text-blue-950/70">An Admin must review this request.</p>}
       </section> : null}
-      {workItem && !mine ? (
+      {workItem && !mine && !adminReviewLocked ? (
         <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
           <h2 className="font-semibold">{workItem.assignedToName ? `Assigned to ${workItem.assignedToName}` : "Claim this item"}</h2>
           <p className="mt-2 text-sm leading-6 text-black/50">Claiming places it in your personal work list.</p>
@@ -93,7 +95,7 @@ export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, c
         </section>
       ) : null}
 
-      {workItem && canAssign ? <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
+      {workItem && canAssign && !adminReviewLocked ? <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
         <h2 className="font-semibold">Assign to staff</h2>
         <label htmlFor="support-assignee" className="mt-3 block text-sm font-semibold">Team member</label>
         <select id="support-assignee" value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm"><option value="">Select a team member</option>{assignableStaff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}</select>
@@ -143,10 +145,13 @@ export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, c
         <>
           <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
             <h2 className="font-semibold">Pause request</h2>
-            <p className="mt-2 text-sm leading-6 text-black/50">Temporarily remove this item from the active queue. The note is visible only to staff.</p>
+            <p className="mt-2 text-sm leading-6 text-black/50">Choose what needs to happen before work continues. There is no automatic timer.</p>
             <label className="mt-4 block text-sm font-semibold" htmlFor="pause-note">Internal pause note</label>
-            <textarea id="pause-note" value={pauseNote} onChange={(event) => setPauseNote(event.target.value)} rows={3} placeholder="Why is this request being paused?" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm outline-none focus:border-[var(--green-strong)]" />
-            <div className="mt-3 grid grid-cols-3 gap-2">{[1,3,7].map((days) => <button key={days} onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "snooze", days, note: pauseNote })} disabled={busy || pauseNote.trim().length < 2} className="rounded-lg border border-black/10 py-2 text-xs font-semibold hover:border-black/30 disabled:opacity-35">Pause {days}d</button>)}</div>
+            <textarea id="pause-note" value={pauseNote} onChange={(event) => setPauseNote(event.target.value)} rows={3} placeholder="Optional context for other staff" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm outline-none focus:border-[var(--green-strong)]" />
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <button type="button" onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "pause", reason: "customer_approval", note: pauseNote })} disabled={busy} className="rounded-xl border border-black/10 px-4 py-3 text-sm font-semibold hover:border-black/30 disabled:opacity-35">Wait until customer approval</button>
+              <button type="button" onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "pause", reason: "admin_review", note: pauseNote })} disabled={busy} className="rounded-xl border border-black/10 px-4 py-3 text-sm font-semibold hover:border-black/30 disabled:opacity-35">Wait until admin review</button>
+            </div>
           </section>
         </>
       ) : null}

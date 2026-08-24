@@ -51,7 +51,7 @@ export async function POST(request: Request) {
             body: returnReceivedMessage({ discrepancy, closed: !discrepancy && outboundDelivered }),
           },
         });
-        if (discrepancy) await tx.workItem.upsert({ where: { replacementOrderId_kind: { replacementOrderId: shipment.replacementOrderId, kind: "return_discrepancy" } }, update: { status: "open", assignedToStaffId: null, snoozedUntil: null, lastActivityAt: new Date() }, create: { replacementOrderId: shipment.replacementOrderId, team: "support", kind: "return_discrepancy" } });
+        if (discrepancy) await tx.workItem.upsert({ where: { replacementOrderId_kind: { replacementOrderId: shipment.replacementOrderId, kind: "return_discrepancy" } }, update: { status: "open", assignedToStaffId: null, snoozedUntil: null, pauseReason: null, lastActivityAt: new Date() }, create: { replacementOrderId: shipment.replacementOrderId, team: "support", kind: "return_discrepancy" } });
         if (!discrepancy && shipment.replacementOrder && refundableDepositInCents(shipment.replacementOrder) > 0 && isDepositRefundEligible({
           orderStatus: nextStatus,
           inboundShipmentStatuses: ["received"],

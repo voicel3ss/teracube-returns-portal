@@ -10,7 +10,7 @@ Open `/staff/login`, enter `support@myteracube.com`, and submit the one-time cod
 
 - Personal claimed work appears above the open team queue.
 - A support agent must claim an item before reviewing it.
-- Claimed work can be snoozed for 1, 3, or 7 days with a note.
+- Claimed work can be paused for one of two explicit reasons: **waiting for customer approval** or **waiting for admin review**. Customer replies automatically resume only the customer-wait state; admin-review waits remain locked until an Admin resumes them. An optional internal note records context without exposing it to the customer.
 - Reassigning another agent's item requires a note and is audited.
 - Search accepts replacement order number, device serial, or customer email. Results and customer records show masked parent emails; Repair and Logistics never receive parent email data.
 - Unsolicited parent replies appear as **Customer message** work. Sending a normal reply completes that item. Asking for a reply pauses the current task, and the same task reopens automatically when the parent answers; unrelated work is not discarded.

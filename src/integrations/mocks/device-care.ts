@@ -13,6 +13,7 @@ type MockDeviceRecord = {
   childPhone: string;
   iccid: string;
   parentEmail: string;
+  childName: string;
 };
 
 const DEVICE_RECORDS: MockDeviceRecord[] = [
@@ -21,30 +22,35 @@ const DEVICE_RECORDS: MockDeviceRecord[] = [
     childPhone: "+12065550142",
     iccid: "8901260123456789012",
     parentEmail: "sarah@example.com",
+    childName: "Maya",
   },
   {
     serial: "202503T2S118842",
     childPhone: "+12065550177",
     iccid: "8901260123456789055",
     parentEmail: "jordan@example.com",
+    childName: "Noah",
   },
   {
     serial: "202401TC4009317",
     childPhone: "+12065550199",
     iccid: "8901260123456789099",
     parentEmail: "alex@example.com",
+    childName: "Avery",
   },
   {
     serial: "202402TC4009418",
     childPhone: "+12065550164",
     iccid: "8901260123456789064",
     parentEmail: "casey@example.com",
+    childName: "Eli",
   },
   {
     serial: "202403T2E236105",
     childPhone: "+12065550185",
     iccid: "8901260123456789085",
     parentEmail: "morgan@example.com",
+    childName: "Sofia",
   },
 ];
 
@@ -60,7 +66,7 @@ export class MockIdentityProvider implements IdentityProvider {
     const record = DEVICE_RECORDS.find(
       (candidate) => candidate.serial === serial || candidate.childPhone === childPhone,
     );
-    return record ? { serial: record.serial, iccid: record.iccid, parentEmail: record.parentEmail } : null;
+    return record ? { serial: record.serial, iccid: record.iccid, parentEmail: record.parentEmail, childName: record.childName } : null;
   }
 
   async backfillOutboundSerial(): Promise<{ serial: string } | null> {

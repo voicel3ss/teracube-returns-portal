@@ -32,7 +32,7 @@ export default function Home() {
               Teracube repairs &amp; replacements
             </p>
             <h1 className="text-balance text-5xl font-semibold leading-[1.01] tracking-[-0.05em] sm:text-7xl">
-              Let’s get their device working again.
+              Let’s get your device working again.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-black/62">
               Start a repair or replacement request in a few minutes. We’ll identify the device, explain your options clearly, and keep you updated from start to finish.

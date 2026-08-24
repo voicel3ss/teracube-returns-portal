@@ -3,6 +3,7 @@ import { CustomerTokenService } from "@/auth/customer-token";
 import { PrismaCustomerTokenRepository } from "@/db/auth-repositories";
 import { prisma } from "@/db/prisma";
 import { decodePhotoUploads, PhotoUploadError } from "@/lib/photo-upload";
+import { customerReplyResumablePauseReasons } from "@/domain/work-item-pause";
 
 const photoSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
     where: { id: access.replacementOrderId },
     select: {
       reviewState: true,
-      workItems: { where: { team: "support", status: { not: "completed" } }, select: { id: true } },
+      workItems: { where: { team: "support", status: { not: "completed" } }, select: { id: true, pauseReason: true } },
     },
   });
   if (!order) return Response.json({ error: "Request not found." }, { status: 404 });
@@ -68,23 +69,23 @@ export async function POST(request: Request) {
 
     if (order.workItems.length > 0) {
       await tx.workItem.updateMany({
-        where: { replacementOrderId: access.replacementOrderId, team: "support", status: { not: "completed" }, assignedToStaffId: { not: null } },
-        data: { status: "claimed", lastActivityAt: new Date(), snoozedUntil: null },
+        where: { replacementOrderId: access.replacementOrderId, team: "support", assignedToStaffId: { not: null }, OR: [{ status: "claimed" }, { status: "snoozed", pauseReason: { in: customerReplyResumablePauseReasons } }] },
+        data: { status: "claimed", lastActivityAt: new Date(), snoozedUntil: null, pauseReason: null },
       });
       await tx.workItem.updateMany({
-        where: { replacementOrderId: access.replacementOrderId, team: "support", status: { not: "completed" }, assignedToStaffId: null },
-        data: { status: "open", lastActivityAt: new Date(), snoozedUntil: null },
+        where: { replacementOrderId: access.replacementOrderId, team: "support", status: "open", assignedToStaffId: null },
+        data: { lastActivityAt: new Date(), snoozedUntil: null, pauseReason: null },
       });
       if (order.reviewState === "needs_clarification") {
         await tx.workItem.updateMany({
           where: { replacementOrderId: access.replacementOrderId, team: "support", kind: "needs_clarification", status: { not: "completed" } },
-          data: { snoozedUntil: null, lastActivityAt: new Date() },
+          data: { snoozedUntil: null, pauseReason: null, lastActivityAt: new Date() },
         });
       }
     } else {
       await tx.workItem.upsert({
         where: { replacementOrderId_kind: { replacementOrderId: access.replacementOrderId, kind: "customer_message" } },
-        update: { status: "open", assignedToStaffId: null, snoozedUntil: null, lastActivityAt: new Date() },
+        update: { status: "open", assignedToStaffId: null, snoozedUntil: null, pauseReason: null, lastActivityAt: new Date() },
         create: { replacementOrderId: access.replacementOrderId, team: "support", kind: "customer_message", status: "open" },
       });
     }

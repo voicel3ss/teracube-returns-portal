@@ -36,7 +36,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (resolvingException) {
         const resolved = await tx.replacementOrder.updateMany({ where: { id, status: order.status }, data: { resolution: parsed.data.resolution, status: nextStatus } });
         if (resolved.count !== 1) throw new ResolutionConflictError();
-        await tx.workItem.updateMany({ where: { replacementOrderId: id, kind: resolvingDiscrepancy ? "return_discrepancy" : "fulfillment_blocked", status: { not: "completed" } }, data: { status: "completed", lastActivityAt: new Date(), snoozedUntil: null } });
+        await tx.workItem.updateMany({ where: { replacementOrderId: id, kind: resolvingDiscrepancy ? "return_discrepancy" : "fulfillment_blocked", status: { not: "completed" } }, data: { status: "completed", lastActivityAt: new Date(), snoozedUntil: null, pauseReason: null } });
         await tx.conversationMessage.create({ data: { replacementOrderId: id, senderKind: "system", body: customerMessage } });
       } else {
         await tx.replacementOrder.update({ where: { id }, data: { resolution: parsed.data.resolution } });

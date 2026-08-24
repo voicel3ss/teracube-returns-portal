@@ -53,11 +53,11 @@ export async function POST(request: Request) {
         if (status === "fulfillment_blocked") {
           await tx.workItem.upsert({
             where: { replacementOrderId_kind: { replacementOrderId: order.id, kind: "fulfillment_blocked" } },
-            update: { status: "open", assignedToStaffId: null, snoozedUntil: null, lastActivityAt: now },
+            update: { status: "open", assignedToStaffId: null, snoozedUntil: null, pauseReason: null, lastActivityAt: now },
             create: { replacementOrderId: order.id, team: "support", kind: "fulfillment_blocked" },
           });
         } else if (order.status === "fulfillment_blocked") {
-          await tx.workItem.updateMany({ where: { replacementOrderId: order.id, kind: "fulfillment_blocked", status: { not: "completed" } }, data: { status: "completed", snoozedUntil: null, lastActivityAt: now } });
+          await tx.workItem.updateMany({ where: { replacementOrderId: order.id, kind: "fulfillment_blocked", status: { not: "completed" } }, data: { status: "completed", snoozedUntil: null, pauseReason: null, lastActivityAt: now } });
         }
         if (!["closed", "unidentified", "return_discrepancy"].includes(order.status)) {
           const description = shipment.type === "outbound"

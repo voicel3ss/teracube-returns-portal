@@ -85,7 +85,9 @@ async function verify() {
     `SELECT COUNT(*)::text AS count
      FROM work_items
      WHERE (status = 'open' AND assigned_to_staff_id IS NOT NULL)
-        OR (status IN ('claimed', 'snoozed') AND assigned_to_staff_id IS NULL)`,
+        OR (status IN ('claimed', 'snoozed') AND assigned_to_staff_id IS NULL)
+        OR (status = 'snoozed' AND (pause_reason IS NULL OR snoozed_until IS NOT NULL))
+        OR (status <> 'snoozed' AND pause_reason IS NOT NULL)`,
   );
   if (inconsistentWorkOwnership.rows[0]?.count !== "0") throw new Error("A support work item has an assignment that disagrees with its status.");
 

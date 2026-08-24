@@ -30,6 +30,8 @@ type Device = {
   deviceType: "phone" | "watch";
   manufactured: string;
   iccidMasked: string;
+  associatedEmail?: string;
+  childName?: string;
 };
 type ReplacementOption = {
   id: string;
@@ -264,6 +266,22 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
     setAddressValidationToken(null);
   }
 
+  function goBack() {
+    setError(null);
+    setActiveRequest(null);
+    if (step === "confirm") {
+      setDevice(null);
+      setLookupFailed(false);
+      setStep("identify");
+    } else if (step === "fault") {
+      setStep(device ? "confirm" : "identify");
+    } else if (step === "options") {
+      setStep("fault");
+    } else if (step === "checkout") {
+      setStep("options");
+    }
+  }
+
   function useSampleAddress() {
     setAddress({
       name: "Teracube",
@@ -358,6 +376,12 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
       ) : null}
 
       <section className="rounded-[1.75rem] border border-black/10 bg-white p-6 shadow-[0_20px_60px_rgba(20,30,22,0.07)] sm:p-10">
+        {!activeRequest && step !== "identify" && step !== "done" ? (
+          <button type="button" onClick={goBack} disabled={busy} className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-black/55 transition hover:text-black disabled:opacity-40">
+            <span aria-hidden="true">←</span> Back
+          </button>
+        ) : null}
+
         {activeRequest ? (
           <div role="status" className="rounded-2xl border border-[var(--green-strong)]/25 bg-[var(--mint)]/25 p-6">
             <p className="text-sm font-semibold text-[var(--green-strong)]">Existing request found</p>
@@ -556,7 +580,9 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
                 </div>
                 <span className="rounded-full bg-[var(--mint)] px-3 py-1 text-xs font-semibold text-black/65">Active plan</span>
               </div>
-              <dl className="mt-6 grid grid-cols-2 gap-4 border-t border-black/10 pt-5 text-sm">
+              <dl className="mt-6 grid gap-4 border-t border-black/10 pt-5 text-sm sm:grid-cols-2">
+                <div><dt className="text-black/45">Child</dt><dd className="mt-1 font-medium">{device.childName ?? "Name not available"}</dd></div>
+                <div><dt className="text-black/45">Associated email</dt><dd className="mt-1 break-all font-medium">{device.associatedEmail ?? email}</dd></div>
                 <div><dt className="text-black/45">Manufactured</dt><dd className="mt-1 font-medium">{device.manufactured}</dd></div>
                 <div><dt className="text-black/45">ICCID</dt><dd className="mt-1 font-medium">{device.iccidMasked}</dd></div>
               </dl>

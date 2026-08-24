@@ -44,10 +44,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
       const attached = await tx.replacementOrder.updateMany({ where: { id, status: "unidentified", processTypeId: null }, data: { returnedDeviceSerial: serial, processTypeId: processType.id, quotedFeeInCents: processType.feeInCents, quotedDepositInCents: processType.depositInCents, status: "awaiting_verification", reviewState: "unreviewed" } });
       if (attached.count !== 1) throw new IdentificationConflictError();
-      await tx.workItem.updateMany({ where: { replacementOrderId: id, kind: "unidentified_device", status: { not: "completed" } }, data: { status: "completed", lastActivityAt: new Date(), snoozedUntil: null } });
+      await tx.workItem.updateMany({ where: { replacementOrderId: id, kind: "unidentified_device", status: { not: "completed" } }, data: { status: "completed", lastActivityAt: new Date(), snoozedUntil: null, pauseReason: null } });
       await tx.workItem.upsert({
         where: { replacementOrderId_kind: { replacementOrderId: id, kind: "claim_verification" } },
-        update: { team: "support", status: "claimed", assignedToStaffId: staff.id, snoozedUntil: null, lastActivityAt: new Date() },
+        update: { team: "support", status: "claimed", assignedToStaffId: staff.id, snoozedUntil: null, pauseReason: null, lastActivityAt: new Date() },
         create: { replacementOrderId: id, team: "support", kind: "claim_verification", status: "claimed", assignedToStaffId: staff.id },
       });
       await tx.conversationMessage.create({ data: { replacementOrderId: id, senderKind: "system", body: `Support identified this device as ${model.name} (${serial}). The claim is now ready for verification.` } });

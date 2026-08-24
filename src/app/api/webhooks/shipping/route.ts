@@ -53,11 +53,11 @@ export async function POST(request: Request) {
       if (orderStatus === "fulfillment_blocked") {
         await tx.workItem.upsert({
           where: { replacementOrderId_kind: { replacementOrderId: shipment.replacementOrderId, kind: "fulfillment_blocked" } },
-          update: { status: "open", assignedToStaffId: null, snoozedUntil: null, lastActivityAt: occurredAt },
+          update: { status: "open", assignedToStaffId: null, snoozedUntil: null, pauseReason: null, lastActivityAt: occurredAt },
           create: { replacementOrderId: shipment.replacementOrderId, team: "support", kind: "fulfillment_blocked" },
         });
       } else if (shipment.replacementOrder.status === "fulfillment_blocked") {
-        await tx.workItem.updateMany({ where: { replacementOrderId: shipment.replacementOrderId, kind: "fulfillment_blocked", status: { not: "completed" } }, data: { status: "completed", snoozedUntil: null, lastActivityAt: occurredAt } });
+        await tx.workItem.updateMany({ where: { replacementOrderId: shipment.replacementOrderId, kind: "fulfillment_blocked", status: { not: "completed" } }, data: { status: "completed", snoozedUntil: null, pauseReason: null, lastActivityAt: occurredAt } });
       }
       await tx.conversationMessage.create({ data: { replacementOrderId: shipment.replacementOrderId, senderKind: "system", body: carrierUpdateMessage({ description: parsed.data.description, closed: orderStatus === "closed" }) } });
     }

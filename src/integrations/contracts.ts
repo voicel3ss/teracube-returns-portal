@@ -56,6 +56,7 @@ export interface IdentityProvider {
     serial: string;
     iccid: string;
     parentEmail?: string;
+    childName?: string;
   } | null>;
   backfillOutboundSerial(orderId: string): Promise<{ serial: string } | null>;
 }

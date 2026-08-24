@@ -14,6 +14,13 @@ export function StaffLoginForm({ googleClientId }: { googleClientId?: string }) 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function useDifferentEmail() {
+    setChallengeId(null);
+    setCode("");
+    setLocalCode(null);
+    setError(null);
+  }
+
   async function requestCode() {
     setBusy(true);
     setError(null);
@@ -72,6 +79,9 @@ export function StaffLoginForm({ googleClientId }: { googleClientId?: string }) 
       />
       {challengeId ? (
         <>
+          <button type="button" onClick={useDifferentEmail} disabled={busy} className="mt-3 text-sm font-semibold text-[var(--green-strong)] underline decoration-black/15 underline-offset-4 disabled:opacity-40">
+            ← Use a different email
+          </button>
           <label className="mt-5 block text-sm font-semibold" htmlFor="staff-code">Verification code</label>
           <input
             id="staff-code"

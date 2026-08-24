@@ -135,6 +135,11 @@ enum WorkItemStatus {
   completed
 }
 
+enum WorkItemPauseReason {
+  customer_approval
+  admin_review
+}
+
 enum WorkItemKind {
   claim_verification
   unidentified_device
@@ -425,6 +430,7 @@ model WorkItem {
   status             WorkItemStatus   @default(open)
   assignedToStaffId  String?          @map("assigned_to_staff_id") @db.Uuid
   snoozedUntil       DateTime?        @map("snoozed_until")
+  pauseReason         WorkItemPauseReason? @map("pause_reason")
   assignmentNote     String?          @map("assignment_note")
   lastActivityAt     DateTime         @default(now()) @map("last_activity_at")
   createdAt          DateTime         @default(now()) @map("created_at")

@@ -92,6 +92,8 @@ export async function POST(request: Request) {
       deviceType: model.deviceType,
       manufactured: `${serial.value.manufacturedYear}-${String(serial.value.manufacturedMonth).padStart(2, "0")}`,
       iccidMasked: `••••${identity.iccid.slice(-4)}`,
+      associatedEmail: identity.parentEmail,
+      childName: identity.childName,
     },
     plan: plan ? { status: plan.status } : null,
     parentEmail: trustedParentEmail,

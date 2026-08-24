@@ -72,13 +72,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       ...(asksForReply
         ? [prisma.workItem.update({
           where: { id: currentWork.id },
-          data: { status: "snoozed", snoozedUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), lastActivityAt: new Date() },
+          data: { status: "snoozed", snoozedUntil: null, pauseReason: "customer_approval", lastActivityAt: new Date() },
         })]
         : []),
       ...(!asksForReply
         ? [prisma.workItem.updateMany({
           where: { replacementOrderId: id, team: "support", kind: "customer_message", status: { not: "completed" } },
-          data: { status: "completed", lastActivityAt: new Date(), snoozedUntil: null },
+          data: { status: "completed", lastActivityAt: new Date(), snoozedUntil: null, pauseReason: null },
         })]
         : []),
       prisma.conversationMessage.create({
@@ -125,7 +125,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         const repriced = await tx.replacementOrder.updateMany({ where: { id, reviewState: "unreviewed", processTypeId: order.processType!.id }, data: { processTypeId: paidProcess.id, quotedFeeInCents: paidProcess.feeInCents, quotedDepositInCents: paidProcess.depositInCents, csVerifiedFault: repriceData.csVerifiedFault, reviewState: "needs_clarification", status: "submitted", freeOutcomeReason: null, resolution: null } });
         if (repriced.count !== 1) throw new ReviewConflictError();
         await tx.conversationMessage.create({ data: { replacementOrderId: id, senderKind: "system", body: customerMessage } });
-        await tx.workItem.updateMany({ where: { replacementOrderId: id, kind: "claim_verification", status: { not: "completed" } }, data: { lastActivityAt: new Date(), snoozedUntil: null } });
+        await tx.workItem.updateMany({ where: { replacementOrderId: id, kind: "claim_verification", status: { not: "completed" } }, data: { lastActivityAt: new Date(), snoozedUntil: null, pauseReason: null } });
         await tx.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "replacement_order.repriced_for_accidental_damage", entityType: "replacement_order", entityId: id, metadata: { previousProcessTypeId: order.processType!.id, processTypeId: paidProcess.id, balanceDueInCents: balanceDue } } });
       });
     } catch (error) {
@@ -169,7 +169,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         create: { id: `00000000-0000-4000-8000-${id.replaceAll("-", "").slice(0, 12)}`, replacementOrderId: id, type: "inbound", status: "label_ready", provider: "local-shipping", providerShipmentId: label.providerShipmentId, trackingNumber: label.trackingNumber, labelObjectKey: labelKey, labelFilename: `teracube-return-${order.orderNumber}.txt`, labelContentType: "text/plain", labelData: Buffer.from(label.labelBytes), qrCodeObjectKey: label.qrCodeBytes ? qrKey : null },
       });
       await tx.conversationMessage.create({ data: { replacementOrderId: id, senderKind: "system", body: `Your request is verified. Return tracking: ${label.trackingNumber}. ${config.returnInstructions}` } });
-      await tx.workItem.updateMany({ where: { replacementOrderId: id, kind: { in: ["claim_verification", "needs_clarification", "customer_message"] }, status: { not: "completed" } }, data: { status: "completed", lastActivityAt: new Date(), snoozedUntil: null } });
+      await tx.workItem.updateMany({ where: { replacementOrderId: id, kind: { in: ["claim_verification", "needs_clarification", "customer_message"] }, status: { not: "completed" } }, data: { status: "completed", lastActivityAt: new Date(), snoozedUntil: null, pauseReason: null } });
       await tx.auditEvent.create({ data: { actorStaffId: staff.id, actorKind: "staff", action: "replacement_order.claim_reviewed", entityType: "replacement_order", entityId: id, metadata: { confirmedCoverage: verificationData.confirmedCoverage, freeOutcomeReasonRecorded: Boolean(verificationData.freeOutcomeReason) } } });
     });
   } catch (error) {

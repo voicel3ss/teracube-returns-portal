@@ -33,10 +33,10 @@ export async function POST(request: Request) {
       await tx.conversationMessage.create({ data: { replacementOrderId: order.id, senderKind: "system", body: `Payment of $${(balanceInCents / 100).toFixed(2)} was received. Support will now finish verifying your request.` } });
       await tx.workItem.upsert({
         where: { replacementOrderId_kind: { replacementOrderId: order.id, kind: "claim_verification" } },
-        update: { status: "claimed", snoozedUntil: null, lastActivityAt: new Date() },
+        update: { status: "claimed", snoozedUntil: null, pauseReason: null, lastActivityAt: new Date() },
         create: { replacementOrderId: order.id, team: "support", kind: "claim_verification", status: "open" },
       });
-      await tx.workItem.updateMany({ where: { replacementOrderId: order.id, kind: "needs_clarification", status: { not: "completed" } }, data: { status: "completed", snoozedUntil: null, lastActivityAt: new Date() } });
+      await tx.workItem.updateMany({ where: { replacementOrderId: order.id, kind: "needs_clarification", status: { not: "completed" } }, data: { status: "completed", snoozedUntil: null, pauseReason: null, lastActivityAt: new Date() } });
       await tx.auditEvent.create({ data: { actorKind: "customer", action: "replacement_order.additional_payment_captured", entityType: "replacement_order", entityId: order.id, metadata: { amountInCents: balanceInCents, provider: "mock-commerce" } } });
     });
   } catch (error) {
