@@ -16,6 +16,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:queue-samples": "tsx scripts/create-team-queue-samples.ts",
+    "db:closed-samples": "tsx scripts/create-closed-order-samples.ts",
     "db:studio": "prisma studio",
     "db:verify": "tsx scripts/verify-database.ts",
     "verify": "npm run typecheck && npm run lint && npm test && npm run db:verify && npm run build",

@@ -76,7 +76,7 @@ Regular replacement has two independent progress legs after inbound tracking sta
 ## Security boundary
 
 - Staff belong to one or more teams; effective permissions are the union of team permissions.
-- Parent emails and other PII are masked by default; reveal-gated fields require an audit event.
+- Parent emails are shown in full to authorized Support, Oversight, and Admin users so staff can identify the correct customer and see alternate addresses. Address, payment, ICCID, and IMEI fields remain masked or reveal-gated and require an audit event.
 - Repair staff cannot reveal parent or child PII.
 - Logistics can reveal an address only on demand; the reveal is audited.
 - Raw payment card data never enters the application.

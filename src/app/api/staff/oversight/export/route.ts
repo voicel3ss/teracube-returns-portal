@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   const config = await prisma.appConfig.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } });
   const staleBefore = new Date(Date.now() - config.staleClaimDays * 86_400_000);
   const orders = await prisma.replacementOrder.findMany({
-    where: { id: { in: [...new Set(parsed.data.caseIds)] }, status: { not: "closed" } },
+    where: { id: { in: [...new Set(parsed.data.caseIds)] } },
     include: {
       customer: { include: { emails: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] } } },
       processType: { select: { flow: true } },
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     },
   });
 
-  const filename = `active-repair-cases-with-pii-${new Date().toISOString().slice(0, 10)}.csv`;
+  const filename = `repair-cases-with-pii-${new Date().toISOString().slice(0, 10)}.csv`;
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

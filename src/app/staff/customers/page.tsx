@@ -4,7 +4,6 @@ import { hasPermission } from "@/auth/permissions";
 import { staffDestination } from "@/auth/staff-destination";
 import { prisma } from "@/db/prisma";
 import { StaffShell } from "../support/staff-shell";
-import { maskPii } from "@/security/pii";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +34,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     include: {
       emails: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] },
       devices: { select: { serial: true } },
-      orders: { select: { id: true, orderNumber: true, status: true, returnedDeviceSerial: true, outboundDeviceSerial: true }, orderBy: { createdAt: "desc" } },
+      orders: { select: { id: true, orderNumber: true, status: true, returnedDeviceSerial: true, outboundDeviceSerial: true, updatedAt: true }, orderBy: { createdAt: "desc" } },
       _count: { select: { devices: true, orders: true } },
     },
     orderBy: { updatedAt: "desc" },
@@ -60,14 +59,29 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           </form>
         </div>
         <section className="mt-8 rounded-2xl border border-black/10 bg-white p-5">
-          <h2 className="font-semibold">Active customers</h2>
+          <div>
+            <h2 className="font-semibold">Customer directory</h2>
+            <p className="mt-1 text-sm text-black/45">Find every email, device, and request connected to a customer.</p>
+          </div>
           <div className="mt-4 divide-y divide-black/8">
             {customerRows.map((customer) => (
               <div key={customer.id} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto] sm:items-start">
                 <div className="min-w-0">
-                  <p className="font-medium">{customer.emails[0] ? maskPii("parent_email", customer.emails[0].email) : "No email"}</p>
+                  {customer.emails.length ? (
+                    <div className="space-y-1">
+                      {customer.emails.map((email) => (
+                        <p key={email.id} className="break-all font-medium">
+                          {email.email}
+                          {email.isPrimary && customer.emails.length > 1 ? <span className="ml-2 text-[10px] font-semibold uppercase text-black/35">Primary</span> : null}
+                        </p>
+                      ))}
+                    </div>
+                  ) : <p className="font-medium">No email</p>}
                   <p className="mt-1 text-xs text-black/40">{customer.emails.length} email{customer.emails.length === 1 ? "" : "s"} · {customer.associatedDeviceCount} associated device{customer.associatedDeviceCount === 1 ? "" : "s"} · {customer._count.orders} order{customer._count.orders === 1 ? "" : "s"}</p>
-                  {customer.orders.length ? <div className="mt-3 flex flex-wrap gap-2">{customer.orders.map((order) => <Link key={order.id} href={`/staff/support/orders/${order.id}`} className="rounded-lg border border-black/10 bg-black/[.02] px-3 py-1.5 text-xs font-semibold hover:border-black/25">#{String(order.orderNumber).padStart(4, "0")} · {order.status.replaceAll("_", " ")}</Link>)}</div> : <p className="mt-2 text-xs text-black/35">No replacement requests yet.</p>}
+                  {customer.orders.length ? <div className="mt-3 flex flex-wrap gap-2">{customer.orders.map((order) => {
+                    const overdue = order.status !== "closed" && order.updatedAt.getTime() < Date.now() - 86_400_000;
+                    return <Link key={order.id} href={`/staff/support/orders/${order.id}`} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${overdue ? "border-red-200 bg-red-50 text-red-800 hover:border-red-400" : "border-black/10 bg-black/[.02] hover:border-black/25"}`}>#{String(order.orderNumber).padStart(4, "0")} · {order.status.replaceAll("_", " ")}{overdue ? " · Over 24h" : ""}</Link>;
+                  })}</div> : <p className="mt-2 text-xs text-black/35">No replacement requests yet.</p>}
                 </div>
                 <span className="font-mono text-xs text-black/30">Customer …{customer.id.slice(-6)}</span>
               </div>

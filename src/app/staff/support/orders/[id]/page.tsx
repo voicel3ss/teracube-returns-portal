@@ -64,7 +64,7 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
                 <Badge>{displayedStatus}</Badge>
               </div>
               <dl className="mt-7 grid gap-5 border-t border-black/10 pt-6 sm:grid-cols-2">
-                <Data label="Customer"><PiiField orderId={order.id} field="parent_email" masked={order.customer.emails[0] ? maskPii("parent_email", order.customer.emails[0].email) : "No email"} /></Data>
+                <Data label="Customer emails">{order.customer.emails.length ? <span className="space-y-1">{order.customer.emails.map((email) => <span key={email.id} className="block break-all">{email.email}{email.isPrimary && order.customer.emails.length > 1 ? <span className="ml-2 text-[10px] font-semibold uppercase text-black/35">Primary</span> : null}</span>)}</span> : "No email"}</Data>
                 <Data label="Communication ticket">{order.communicationTicketId ?? "Not created"}</Data>
                 <Data label="Device">{order.returnedDevice?.model.name ?? "Unidentified"}</Data>
                 <Data label="Serial">{order.returnedDeviceSerial ?? "Not known"}</Data>

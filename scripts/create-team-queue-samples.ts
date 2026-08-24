@@ -37,6 +37,14 @@ const samples = [
     faultCategory: "camera" as const,
     faultText: "The rear camera will not focus and every photo remains blurry after restarting the device.",
   },
+  {
+    serial: "202608T2E240805",
+    modelCode: "T2E",
+    email: "stale.parent@myteracube.com",
+    faultCategory: "calls_cellular" as const,
+    faultText: "Calls and alarms are nearly silent even when every volume control is set to maximum.",
+    daysOld: 7,
+  },
 ] as const;
 
 const sampleAddress = {
@@ -76,6 +84,7 @@ async function main() {
     const model = await prisma.deviceModel.findUnique({ where: { code: sample.modelCode } });
     if (!model) throw new Error(`Device model ${sample.modelCode} is not seeded.`);
 
+    const sampleTime = "daysOld" in sample ? new Date(Date.now() - sample.daysOld * 86_400_000) : new Date();
     const order = await prisma.$transaction(async (tx) => {
       const customer = await tx.customer.create({
         data: {
@@ -121,18 +130,24 @@ async function main() {
           quotedDepositInCents: processType.depositInCents,
           amountPaidInCents: processType.feeInCents + processType.depositInCents,
           encryptedShippingAddress,
-          submittedAt: new Date(),
+          submittedAt: sampleTime,
+          createdAt: sampleTime,
+          updatedAt: sampleTime,
           workItems: {
             create: {
               team: "support",
               kind: "claim_verification",
               status: "open",
+              createdAt: sampleTime,
+              updatedAt: sampleTime,
+              lastActivityAt: sampleTime,
             },
           },
           messages: {
             create: {
               senderKind: "customer",
               body: sample.faultText,
+              createdAt: sampleTime,
             },
           },
         },

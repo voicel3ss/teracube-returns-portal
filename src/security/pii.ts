@@ -17,7 +17,7 @@ export function maskPii(field: PiiField, value: string): string {
     return `${local.slice(0, 1)}•••@${domain}`;
   }
 
-  if (field === "child_phone" || field === "iccid" || field === "payment_reference") {
+  if (field === "child_phone" || field === "iccid" || field === "imei" || field === "payment_reference") {
     return `••••${value.slice(-4)}`;
   }
 

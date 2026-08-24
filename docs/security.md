@@ -20,7 +20,7 @@
 
 ## PII
 
-- Parent emails are masked in staff-facing customer and order screens. Other PII remains masked or reveal-gated, and Repair never receives parent PII.
+- Parent emails are shown in full on authorized Support, Customers, Oversight, and Admin screens, including alternate addresses. Other PII remains masked or reveal-gated, and Repair and Logistics do not receive parent email data.
 - Shipping addresses have an authenticated AES-256-GCM encryption helper for application-layer encryption before persistence.
 - Every successful reveal must persist an audit event before plaintext is returned. If audit persistence fails, the reveal fails closed.
 - Audit metadata records the field and active team, never the revealed value.

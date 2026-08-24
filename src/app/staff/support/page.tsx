@@ -6,7 +6,6 @@ import { staffDestination } from "@/auth/staff-destination";
 import { prisma } from "@/db/prisma";
 import { StaffShell } from "./staff-shell";
 import { SupportIntakeLink } from "./support-intake-link";
-import { maskPii } from "@/security/pii";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +34,7 @@ export default async function SupportQueuePage({ searchParams }: { searchParams:
       include: {
         assignedToStaff: true,
         replacementOrder: {
-          include: { customer: { include: { emails: { where: { isPrimary: true }, take: 1 } } }, returnedDevice: { include: { model: true } }, processType: true },
+          include: { customer: { include: { emails: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] } } }, returnedDevice: { include: { model: true } }, processType: true },
         },
       },
       orderBy: [{ createdAt: "asc" }],
@@ -49,7 +48,7 @@ export default async function SupportQueuePage({ searchParams }: { searchParams:
               { customer: { emails: { some: { normalized: { contains: q.trim().toLowerCase() } } } } },
             ],
           },
-          include: { customer: { include: { emails: { where: { isPrimary: true }, take: 1 } } }, returnedDevice: { include: { model: true } } },
+          include: { customer: { include: { emails: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] } } }, returnedDevice: { include: { model: true } } },
           take: 12,
           orderBy: { createdAt: "desc" },
         })
@@ -77,12 +76,15 @@ export default async function SupportQueuePage({ searchParams }: { searchParams:
           <section className="mt-7 rounded-2xl border border-black/10 bg-white p-5">
             <div className="flex items-center justify-between"><h2 className="font-semibold">Search results</h2><Link href="/staff/support" className="text-sm text-black/45">Clear</Link></div>
             <div className="mt-4 grid gap-2">
-              {searchResults.length ? searchResults.map((order) => (
-                <Link key={order.id} href={`/staff/support/orders/${order.id}`} className="flex items-center justify-between rounded-xl border border-black/8 px-4 py-3 hover:border-black/25">
+              {searchResults.length ? searchResults.map((order) => {
+                const overdue = order.status !== "closed" && order.updatedAt.getTime() < Date.now() - 86_400_000;
+                return (
+                <Link key={order.id} href={`/staff/support/orders/${order.id}`} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${overdue ? "border-red-200 bg-red-50 hover:border-red-400" : "border-black/8 hover:border-black/25"}`}>
                   <span><strong>#{String(order.orderNumber).padStart(4, "0")}</strong><span className="ml-3 text-sm text-black/45">{order.returnedDevice?.model.name ?? "Unidentified device"}</span></span>
-                  <span className="text-sm text-black/45">{order.customer.emails[0] ? maskPii("parent_email", order.customer.emails[0].email) : ""}</span>
+                  <span className="max-w-[55%] text-right text-sm text-black/45">{formatEmails(order.customer.emails)}{overdue ? <span className="ml-2 font-semibold text-red-700">Over 24h</span> : null}</span>
                 </Link>
-              )) : <p className="text-sm text-black/45">No matching orders.</p>}
+                );
+              }) : <p className="text-sm text-black/45">No matching orders.</p>}
             </div>
           </section>
         ) : null}
@@ -114,6 +116,8 @@ type QueueListItem = {
     returnedDevice: { model: { name: string } } | null;
     processType: { name: string } | null;
     reviewState: string;
+    status: string;
+    updatedAt: Date;
     customer: { emails: Array<{ email: string }> };
   };
 };
@@ -122,12 +126,17 @@ function QueueList({ items, empty }: { items: QueueListItem[]; empty: string }) 
   if (!items.length) return <div className="rounded-2xl border border-dashed border-black/15 bg-white/60 p-8 text-sm text-black/45">{empty}</div>;
   return <div className="grid gap-3">{items.map((item) => {
     const order = item.replacementOrder;
+    const overdue = order.status !== "closed" && order.updatedAt.getTime() < Date.now() - 86_400_000;
     return (
-      <Link key={item.id} data-work-item-id={item.id} href={`/staff/support/orders/${order.id}`} className="group rounded-2xl border border-black/10 bg-white p-5 shadow-[0_10px_30px_rgba(20,30,22,0.035)] transition hover:-translate-y-0.5 hover:border-black/25">
-        <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--green-strong)]">{item.kind === "needs_clarification" ? "Customer replied" : kindLabels[item.kind]}</p><h3 className="mt-1 text-lg font-semibold">Order #{String(order.orderNumber).padStart(4, "0")}</h3></div><span className="rounded-full bg-black/[0.05] px-2.5 py-1 text-xs font-medium">{item.status === "snoozed" ? item.pauseReason === "admin_review" ? "Waiting for admin" : "Waiting for customer" : item.status}</span></div>
+      <Link key={item.id} data-work-item-id={item.id} href={`/staff/support/orders/${order.id}`} className={`group rounded-2xl border p-5 shadow-[0_10px_30px_rgba(20,30,22,0.035)] transition hover:-translate-y-0.5 ${overdue ? "border-red-200 bg-red-50 hover:border-red-400" : "border-black/10 bg-white hover:border-black/25"}`}>
+        <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--green-strong)]">{item.kind === "needs_clarification" ? "Customer replied" : kindLabels[item.kind]}</p><h3 className="mt-1 text-lg font-semibold">Order #{String(order.orderNumber).padStart(4, "0")}</h3>{overdue ? <span className="mt-2 inline-block rounded-full bg-red-100 px-2 py-1 text-[11px] font-semibold text-red-800">Over 24h</span> : null}</div><span className="rounded-full bg-black/[0.05] px-2.5 py-1 text-xs font-medium">{item.status === "snoozed" ? item.pauseReason === "admin_review" ? "Waiting for admin" : "Waiting for customer" : item.status}</span></div>
         <p className="mt-3 text-sm text-black/55">{order.returnedDevice?.model.name ?? "Device not identified"} · {order.returnedDeviceSerial ?? "No serial"}</p>
-        <div className="mt-4 flex items-center justify-between border-t border-black/8 pt-3 text-xs text-black/40"><span>{order.customer.emails[0] ? maskPii("parent_email", order.customer.emails[0].email) : ""}</span><span>{order.processType?.name ?? "Manual review"} →</span></div>
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-black/8 pt-3 text-xs text-black/40"><span className="min-w-0 break-all">{formatEmails(order.customer.emails)}</span><span className="shrink-0">{order.processType?.name ?? "Manual review"} →</span></div>
       </Link>
     );
   })}</div>;
+}
+
+function formatEmails(emails: Array<{ email: string }>): string {
+  return emails.length ? emails.map((email) => email.email).join(", ") : "No email";
 }

@@ -38,12 +38,12 @@ export function hasPermission(teams: readonly StaffTeam[], permission: Permissio
   return teams.some((team) => teamPermissions[team].includes(permission));
 }
 
-export const piiFields = ["child_phone", "iccid", "parent_email", "parent_address", "payment_reference"] as const;
+export const piiFields = ["child_phone", "iccid", "imei", "parent_email", "parent_address", "payment_reference"] as const;
 export type PiiField = (typeof piiFields)[number];
 export type FieldAccess = "masked_reveal_with_audit" | "blocked";
 
 const blockedForRepair = new Set<PiiField>(piiFields);
-const blockedForLogistics = new Set<PiiField>(["child_phone", "iccid", "parent_email", "payment_reference"]);
+const blockedForLogistics = new Set<PiiField>(["child_phone", "iccid", "imei", "parent_email", "payment_reference"]);
 
 export function getPiiFieldAccess(team: StaffTeam, field: PiiField): FieldAccess {
   if (team === "repair" && blockedForRepair.has(field)) return "blocked";

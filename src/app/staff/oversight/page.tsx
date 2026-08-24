@@ -17,13 +17,13 @@ export default async function OversightPage() {
 
   const config = await prisma.appConfig.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } });
   const now = new Date();
+  const overdueBefore = new Date(now.getTime() - 86_400_000);
   const staleBefore = new Date(now.getTime() - config.staleClaimDays * 86_400_000);
   const repairBefore = new Date(now.getTime() - config.stuckRepairDays * 86_400_000);
   const deliveredBefore = new Date(now.getTime() - 86_400_000);
 
   const [orders, owned, deliveredNotScanned, stuckRepairs, resolutions] = await Promise.all([
     prisma.replacementOrder.findMany({
-      where: { status: { not: "closed" } },
       include: {
         processType: { select: { flow: true } },
         returnedDevice: {
@@ -64,11 +64,14 @@ export default async function OversightPage() {
       assignments: uniqueAssignments.map((item) => ({ staffId: item.assignedToStaff!.id, name: item.assignedToStaff!.displayName, team: item.team, work: oversightWorkLabel(item.kind), status: item.status, pauseReason: item.pauseReason })),
       updatedAt: order.updatedAt.toISOString(),
       needsAttention: oversightNeedsAttention(order.status, work, order.updatedAt, staleBefore),
+      overdue: order.status !== "closed" && order.updatedAt < overdueBefore,
+      active: order.status !== "closed",
     };
   });
 
-  const assignedCaseCount = cases.filter((item) => item.assignments.length > 0).length;
-  const attentionCaseCount = cases.filter((item) => item.needsAttention).length;
+  const activeCases = cases.filter((item) => item.active);
+  const assignedCaseCount = activeCases.filter((item) => item.assignments.length > 0).length;
+  const attentionCaseCount = activeCases.filter((item) => item.needsAttention).length;
 
   return (
     <StaffShell name={staff.displayName} area="oversight">
@@ -78,9 +81,9 @@ export default async function OversightPage() {
         <p className="mt-2 max-w-3xl text-black/50">See every active customer request, where it is in the workflow, and who currently owns the next action.</p>
 
         <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="Active cases" value={cases.length} />
+          <Metric label="Active cases" value={activeCases.length} />
           <Metric label="Assigned cases" value={assignedCaseCount} />
-          <Metric label="Unassigned cases" value={cases.length - assignedCaseCount} attention={cases.length - assignedCaseCount > 0} />
+          <Metric label="Unassigned cases" value={activeCases.length - assignedCaseCount} attention={activeCases.length - assignedCaseCount > 0} />
           <Metric label="Needs attention" value={attentionCaseCount} attention={attentionCaseCount > 0} />
         </div>
 

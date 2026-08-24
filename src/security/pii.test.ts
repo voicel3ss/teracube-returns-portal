@@ -8,6 +8,7 @@ describe("PII controls", () => {
   it("masks fields without exposing the complete value", () => {
     expect(maskPii("parent_email", "sarah@example.com")).toBe("s•••@example.com");
     expect(maskPii("child_phone", "+12065551234")).toBe("••••1234");
+    expect(maskPii("imei", "353456789012345")).toBe("••••2345");
     expect(maskPii("parent_address", "123 Main Street")).toBe("••••••••");
   });
 
