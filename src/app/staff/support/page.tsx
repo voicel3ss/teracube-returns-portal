@@ -90,7 +90,7 @@ export default async function SupportQueuePage({ searchParams }: { searchParams:
         <div className="mt-8 grid gap-7 lg:grid-cols-[1fr_0.55fr]">
           <section>
             <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">My work</h2><span className="rounded-full bg-black px-2.5 py-1 text-xs font-semibold text-white">{myItems.length}</span></div>
-            <QueueList items={myItems} empty="Claim an item from the team queue to start working." />
+            <QueueList items={myItems} empty="Open a case from the team queue to start working." />
           </section>
           <section>
             <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Team queue</h2><span className="rounded-full bg-[var(--mint)] px-2.5 py-1 text-xs font-semibold">{teamItems.length}</span></div>

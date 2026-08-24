@@ -14,6 +14,14 @@ describe("staff least-privilege permissions", () => {
     expect(hasPermission(["logistics"], "order:view_all")).toBe(false);
   });
 
+  it("lets Support and Operations claim cases but reserves assignment for Admin", () => {
+    expect(hasPermission(["support"], "queue:claim")).toBe(true);
+    expect(hasPermission(["support"], "queue:assign")).toBe(false);
+    expect(hasPermission(["ops_lead"], "queue:claim")).toBe(true);
+    expect(hasPermission(["ops_lead"], "queue:assign")).toBe(false);
+    expect(hasPermission(["admin"], "queue:assign")).toBe(true);
+  });
+
   it("allows an administrator to perform every tested cross-team action", () => {
     expect(hasPermission(["admin"], "order:verify")).toBe(true);
     expect(hasPermission(["admin"], "repair:record")).toBe(true);

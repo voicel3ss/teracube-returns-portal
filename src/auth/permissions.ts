@@ -26,7 +26,6 @@ const teamPermissions: Record<StaffTeam, readonly Permission[]> = {
     "order:view_all",
     "order:refund",
     "queue:claim",
-    "queue:assign",
     "oversight:view",
   ],
   repair: ["repair:record", "repair:batch_ready"],

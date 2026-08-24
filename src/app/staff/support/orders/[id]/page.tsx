@@ -43,7 +43,7 @@ export default async function SupportOrderPage({ params }: { params: Promise<{ i
   const refundItem = order.workItems.find((item) => item.kind === "deposit_refund");
   const canAssign = hasPermission(staff.teams, "queue:assign");
   const canCompleteAdminReview = hasPermission(staff.teams, "config:manage");
-  const assignableStaff = canAssign ? await prisma.staffUser.findMany({ where: { active: true, memberships: { some: { team: { in: ["support", "ops_lead", "admin"] } } } }, select: { id: true, displayName: true }, orderBy: { displayName: "asc" } }) : [];
+  const assignableStaff = canAssign ? await prisma.staffUser.findMany({ where: { id: { not: staff.id }, active: true, memberships: { some: { team: { in: ["support", "ops_lead", "admin"] } } } }, select: { id: true, displayName: true }, orderBy: { displayName: "asc" } }) : [];
   const coverage = order.processType?.slug.startsWith("warranty-") ? "warranty" : "accident";
   const displayedStatus = order.reviewState === "needs_clarification"
     ? "waiting for customer"

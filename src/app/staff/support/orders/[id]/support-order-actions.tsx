@@ -88,20 +88,20 @@ export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, c
       </section> : null}
       {workItem && !mine && !adminReviewLocked ? (
         <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
-          <h2 className="font-semibold">{workItem.assignedToName ? `Assigned to ${workItem.assignedToName}` : "Claim this item"}</h2>
-          <p className="mt-2 text-sm leading-6 text-black/50">Claiming places it in your personal work list.</p>
-          {workItem.assignedToStaffId ? <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Required note for reassignment" rows={3} className="mt-3 w-full rounded-xl border border-black/15 p-3 text-sm" /> : null}
-          <button onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "claim", note })} disabled={busy} className="mt-4 h-11 w-full rounded-xl bg-black text-sm font-semibold text-white disabled:opacity-35">{workItem.assignedToStaffId ? "Reassign to me" : "Claim item"}</button>
+          <h2 className="font-semibold">{workItem.assignedToName ? `Assigned to ${workItem.assignedToName}` : "Ready to claim"}</h2>
+          <p className="mt-2 text-sm leading-6 text-black/50">{workItem.assignedToName ? "This case is already being handled by another team member." : "Claim this case to reply to the customer and complete its next action."}</p>
+          {!workItem.assignedToStaffId && workItem.status === "open" ? <button type="button" onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "claim" })} disabled={busy} className="mt-4 h-11 w-full cursor-pointer rounded-xl bg-black text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">Claim work</button> : null}
         </section>
       ) : null}
 
-      {workItem && canAssign && !adminReviewLocked ? <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
-        <h2 className="font-semibold">Assign to staff</h2>
+      {workItem && canAssign && mine && workItem.status === "claimed" && !adminReviewLocked ? <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
+        <h2 className="font-semibold">Assign this case</h2>
+        <p className="mt-2 text-sm leading-6 text-black/50">Send your claimed case to any active team member who can access Support.</p>
         <label htmlFor="support-assignee" className="mt-3 block text-sm font-semibold">Team member</label>
         <select id="support-assignee" value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-black/15 bg-white px-3 text-sm"><option value="">Select a team member</option>{assignableStaff.map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>)}</select>
-        <label htmlFor="support-assignment-note" className="mt-3 block text-sm font-semibold">Assignment note</label>
-        <textarea id="support-assignment-note" value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Why is this being assigned?" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm" />
-        <button type="button" onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "assign", staffUserId: assigneeId, note })} disabled={busy || !assigneeId || note.trim().length < 2} className="mt-3 h-10 w-full cursor-pointer rounded-xl border border-black/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-35">Assign item</button>
+        <label htmlFor="support-assignment-note" className="mt-3 block text-sm font-semibold">Note <span className="font-normal text-black/40">(optional)</span></label>
+        <textarea id="support-assignment-note" value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Add context for the assignee" className="mt-2 w-full rounded-xl border border-black/15 p-3 text-sm" />
+        <button type="button" onClick={() => mutate(`/api/staff/work-items/${workItem.id}`, "PATCH", { action: "assign", staffUserId: assigneeId, note })} disabled={busy || !assigneeId} className="mt-3 h-10 w-full cursor-pointer rounded-xl border border-black/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-35">Assign case</button>
       </section> : null}
 
       {orderStatus === "unidentified" ? <section className="rounded-[1.5rem] border border-amber-300 bg-amber-50 p-6">
@@ -114,7 +114,7 @@ export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, c
           <div><label htmlFor="identified-flow" className="block text-sm font-semibold text-amber-950">Replacement path</label><select id="identified-flow" value={identifyFlow} onChange={(event) => setIdentifyFlow(event.target.value as "regular" | "advance")} className="mt-2 h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm"><option value="regular">Customer sends device first</option><option value="advance">Replacement ships first</option></select></div>
         </div>
         <button type="button" onClick={() => mutate(`/api/staff/support/orders/${orderId}/identify`, "POST", { serial: identifySerial, coverage: identifyCoverage, flow: identifyFlow })} disabled={busy || !mine || identifySerial.trim().length < 8} className="mt-4 h-11 w-full cursor-pointer rounded-xl bg-black text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">Attach device and continue</button>
-        {!mine ? <p className="mt-2 text-center text-xs text-amber-950/50">Claim the item before attaching a device.</p> : null}
+        {!mine ? <p className="mt-2 text-center text-xs text-amber-950/50">Only the assigned agent can attach a device.</p> : null}
       </section> : reviewState === "reviewed" ? <section className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-6"><p className="font-semibold text-emerald-900">{orderStatus === "return_discrepancy" ? "Original claim verified" : "Claim verified"}</p><p className="mt-2 text-sm leading-6 text-emerald-800/70">{orderStatus === "return_discrepancy" ? "The package received by Logistics did not match the expected return. Resolve it below." : "The return label is available to the customer and the replacement can move to Logistics when its path is ready."}</p></section> : <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--green-strong)]">Verification gate</p>
         <label htmlFor="verified-fault" className="mt-4 block text-sm font-semibold">Support-verified fault</label>
@@ -138,7 +138,7 @@ export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, c
           : mutate(`/api/staff/support/orders/${orderId}/review`, "POST", { action: "verify", csVerifiedFault: fault, confirmedCoverage, freeOutcomeReason: submittedFreeReason })}
           disabled={busy || !mine || fault.trim().length < 3 || !freeReasonComplete}
           className="mt-5 h-11 w-full rounded-xl bg-[var(--green-strong)] text-sm font-semibold text-white disabled:opacity-35">{accidentalFreeOutcome && accidentalFreeBasis === "paid" ? "Apply fee and request payment" : "Verify and release gate"}</button>
-        {!mine ? <p className="mt-2 text-center text-xs text-black/40">Claim the item before verifying it.</p> : null}
+        {!mine ? <p className="mt-2 text-center text-xs text-black/40">Only the assigned agent can verify this request.</p> : null}
       </section>}
 
       {mine && workItem && workItem.status !== "snoozed" ? (
@@ -173,7 +173,7 @@ export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, c
           <option value="no_replacement">Close without a replacement</option>
         </select>
         <button type="button" onClick={() => mutate(`/api/staff/support/orders/${orderId}/resolution`, "PATCH", { resolution })} disabled={busy || !mine || !resolution} className="mt-4 h-11 w-full cursor-pointer rounded-xl bg-black text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">Resolve discrepancy</button>
-        {!mine ? <p className="mt-2 text-center text-xs text-amber-950/50">Claim the item before resolving it.</p> : null}
+        {!mine ? <p className="mt-2 text-center text-xs text-amber-950/50">Only the assigned agent can resolve this discrepancy.</p> : null}
       </section> : orderStatus === "fulfillment_blocked" ? <section className="rounded-[1.5rem] border border-amber-300 bg-amber-50 p-6">
         <h2 className="font-semibold text-amber-950">Resolve fulfillment block</h2>
         <p className="mt-2 text-sm leading-6 text-amber-950/65">Choose how this request should continue after resolving the inventory or shipping problem.</p>
@@ -187,7 +187,7 @@ export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, c
           <option value="no_replacement">Close without a replacement</option>
         </select>
         <button type="button" onClick={() => mutate(`/api/staff/support/orders/${orderId}/resolution`, "PATCH", { resolution })} disabled={busy || !mine || !resolution} className="mt-4 h-11 w-full cursor-pointer rounded-xl bg-black text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">Resolve fulfillment block</button>
-        {!mine ? <p className="mt-2 text-center text-xs text-amber-950/50">Claim the item before resolving it.</p> : null}
+        {!mine ? <p className="mt-2 text-center text-xs text-amber-950/50">Only the assigned agent can resolve this block.</p> : null}
       </section> : <details className="group rounded-[1.5rem] border border-black/10 bg-white">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-6 [&::-webkit-details-marker]:hidden">
           <div><h2 className="font-semibold">Override customer outcome</h2><p className="mt-1 text-sm text-black/45">Only for upgrades, denials, or other exceptions</p></div>
@@ -205,7 +205,7 @@ export function SupportOrderActions({ orderId, orderStatus, workItem, staffId, c
         <label htmlFor="refund-amount" className="mt-3 block text-sm font-semibold">Refund amount</label>
         <div className="mt-2 flex items-center rounded-xl border border-black/15 px-3"><span className="text-sm text-black/45">$</span><input id="refund-amount" value={refundDollars} onChange={(event) => setRefundDollars(event.target.value)} inputMode="decimal" className="h-11 min-w-0 flex-1 px-2 text-sm outline-none" /></div>
         <button onClick={() => { const cents = Math.round(Number(refundDollars) * 100); if (window.confirm(`Refund $${(cents / 100).toFixed(2)} to the original payment method?`)) void mutate(`/api/staff/support/orders/${orderId}/refund`, "POST", { amountInCents: cents }); }} disabled={busy || !refundOwnedByMe || !refundEligible || !Number.isFinite(Number(refundDollars)) || Number(refundDollars) <= 0} className="mt-3 h-10 w-full rounded-xl bg-black text-sm font-semibold text-white disabled:opacity-35">Confirm refund</button>
-        {!refundOwnedByMe ? <p className="mt-2 text-xs text-black/40">Claim the refund item before issuing the refund.</p> : null}
+        {!refundOwnedByMe ? <p className="mt-2 text-xs text-black/40">Only the assigned agent can issue this refund.</p> : null}
         {!refundEligible ? <p className="mt-2 text-xs text-black/40">Available once the return is {refundGate === "return_received" ? "received by Teracube" : "in transit"}.</p> : null}
       </section> : null}
       {error ? <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}

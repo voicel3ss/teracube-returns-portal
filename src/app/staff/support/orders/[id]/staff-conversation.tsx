@@ -71,7 +71,7 @@ export function StaffConversation({ orderId, messages: initialMessages, canReply
     </div>
     <div className="mt-4 rounded-2xl border border-black/10 p-4">
       <label htmlFor="staff-chat-reply" className="text-sm font-semibold">Message customer</label>
-      {!canReply ? <p className="mt-1 text-xs text-black/45">Claim the active work item before replying.</p> : null}
+      {!canReply ? <p className="mt-1 text-xs text-black/45">Only the assigned agent can reply.</p> : null}
       <textarea id="staff-chat-reply" value={reply} onChange={(event) => setReply(event.target.value)} rows={3} disabled={!canReply} placeholder="Ask a question or send an update" className="mt-2 w-full resize-none rounded-xl border border-black/15 p-3 text-sm outline-none focus:border-[var(--green-strong)] disabled:bg-black/[0.03]" />
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-black/40">Send an update normally. Choose “Ask for reply” only when work must wait for the customer.</p>
