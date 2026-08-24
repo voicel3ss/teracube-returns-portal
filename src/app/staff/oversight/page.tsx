@@ -84,7 +84,7 @@ export default async function OversightPage() {
           <Metric label="Needs attention" value={attentionCaseCount} attention={attentionCaseCount > 0} />
         </div>
 
-        <div className="mt-7"><ActiveCasesList cases={cases} /></div>
+        <div className="mt-7"><ActiveCasesList cases={cases} canExportPii={hasPermission(staff.teams, "pii:export")} /></div>
 
         <div className="mt-7 grid gap-7 xl:grid-cols-[1fr_.7fr]">
           <section className="rounded-[1.5rem] border border-black/10 bg-white p-6">

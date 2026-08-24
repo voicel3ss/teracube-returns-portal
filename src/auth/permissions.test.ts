@@ -19,7 +19,9 @@ describe("staff least-privilege permissions", () => {
     expect(hasPermission(["support"], "queue:assign")).toBe(false);
     expect(hasPermission(["ops_lead"], "queue:claim")).toBe(true);
     expect(hasPermission(["ops_lead"], "queue:assign")).toBe(false);
+    expect(hasPermission(["ops_lead"], "pii:export")).toBe(false);
     expect(hasPermission(["admin"], "queue:assign")).toBe(true);
+    expect(hasPermission(["admin"], "pii:export")).toBe(true);
   });
 
   it("allows an administrator to perform every tested cross-team action", () => {

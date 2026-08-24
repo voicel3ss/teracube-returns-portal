@@ -15,6 +15,7 @@ export const permissions = [
   "queue:assign",
   "config:manage",
   "oversight:view",
+  "pii:export",
 ] as const;
 export type Permission = (typeof permissions)[number];
 

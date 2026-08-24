@@ -20,13 +20,13 @@ export function StaffAccountsForm({ accounts, currentStaffId }: { accounts: Acco
     update(selected.includes(team) ? selected.filter((item) => item !== team) : [...selected, team]);
   }
 
-  async function request(method: "POST" | "PATCH", body: object) {
+  async function request(method: "POST" | "PATCH" | "DELETE", body: object) {
     setBusy(true); setNotice(null);
     try {
       const response = await fetch("/api/staff/admin/users", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await readJsonResponse<{ error?: string }>(response);
       if (!response.ok) throw new Error(data.error ?? "The staff account could not be saved.");
-      setNotice("Staff account saved.");
+      setNotice(method === "DELETE" ? "Staff access removed. Assigned work was returned to its team queue." : "Staff account saved.");
       if (method === "POST") { setEmail(""); setDisplayName(""); setTeams(["support"]); }
       router.refresh();
     } catch (caught) { setNotice(caught instanceof Error ? caught.message : "The staff account could not be saved."); }
@@ -42,12 +42,12 @@ export function StaffAccountsForm({ accounts, currentStaffId }: { accounts: Acco
       <TeamChecks teams={teams} onToggle={(team) => toggleTeam(team, teams, setTeams)} />
       <button type="button" onClick={() => request("POST", { email, displayName, teams })} disabled={busy || displayName.trim().length < 2 || !email.includes("@") || !teams.length} className="mt-4 h-10 w-full cursor-pointer rounded-lg bg-black text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">Add account</button>
     </details>
-    <div className="mt-4 divide-y divide-black/10">{accounts.map((account) => <AccountEditor key={`${account.id}-${account.displayName}-${account.active}-${account.teams.join()}`} account={account} current={account.id === currentStaffId} busy={busy} onSave={(next) => request("PATCH", next)} />)}</div>
+    <div className="mt-4 divide-y divide-black/10">{accounts.map((account) => <AccountEditor key={`${account.id}-${account.displayName}-${account.active}-${account.teams.join()}`} account={account} current={account.id === currentStaffId} busy={busy} onSave={(next) => request("PATCH", next)} onRemove={(id) => request("DELETE", { id })} />)}</div>
     {notice ? <p role="status" className="mt-4 text-xs leading-5 text-black/60">{notice}</p> : null}
   </aside>;
 }
 
-function AccountEditor({ account, current, busy, onSave }: { account: Account; current: boolean; busy: boolean; onSave: (account: Account) => void }) {
+function AccountEditor({ account, current, busy, onSave, onRemove }: { account: Account; current: boolean; busy: boolean; onSave: (account: Account) => void; onRemove: (id: string) => void }) {
   const [displayName, setDisplayName] = useState(account.displayName);
   const [active, setActive] = useState(account.active);
   const [teams, setTeams] = useState<Team[]>(account.teams);
@@ -57,6 +57,7 @@ function AccountEditor({ account, current, busy, onSave }: { account: Account; c
     <label className="mt-3 flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={active} disabled={current} onChange={(event) => setActive(event.target.checked)} />Account active</label>
     <TeamChecks teams={teams} onToggle={(team) => setTeams(teams.includes(team) ? teams.filter((item) => item !== team) : [...teams, team])} />
     <button type="button" onClick={() => onSave({ ...account, displayName, active, teams })} disabled={busy || displayName.trim().length < 2 || !teams.length} className="mt-4 h-10 w-full cursor-pointer rounded-lg border border-black/15 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-35">Save account</button>
+    {account.active && !current ? <button type="button" onClick={() => { if (window.confirm(`Remove ${account.displayName}'s staff access? Their active sessions will end and assigned work will return to the team queue.`)) onRemove(account.id); }} disabled={busy} className="mt-2 h-10 w-full cursor-pointer rounded-lg border border-red-200 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-35">Remove staff access</button> : null}
   </details>;
 }
 

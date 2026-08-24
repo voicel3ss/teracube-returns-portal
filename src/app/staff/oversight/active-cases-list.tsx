@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { buildOversightCsv } from "@/domain/oversight-csv";
 
 export type ActiveCaseRow = {
   id: string;
@@ -26,10 +27,12 @@ const stageLabels: Record<string, string> = {
   admin: "Admin",
 };
 
-export function ActiveCasesList({ cases }: { cases: ActiveCaseRow[] }) {
+export function ActiveCasesList({ cases, canExportPii }: { cases: ActiveCaseRow[]; canExportPii: boolean }) {
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("all");
   const [assignment, setAssignment] = useState("all");
+  const [exportingPii, setExportingPii] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const normalizedSearch = search.trim().toLowerCase();
 
   const filtered = useMemo(() => cases.filter((item) => {
@@ -45,6 +48,41 @@ export function ActiveCasesList({ cases }: { cases: ActiveCaseRow[] }) {
     return searchable.includes(normalizedSearch);
   }), [assignment, cases, normalizedSearch, stage]);
 
+  function exportCsv() {
+    const csv = buildOversightCsv(filtered);
+    downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `active-repair-cases-${new Date().toISOString().slice(0, 10)}.csv`);
+  }
+
+  async function exportCsvWithPii() {
+    setExportingPii(true);
+    setExportError(null);
+    try {
+      const response = await fetch("/api/staff/oversight/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseIds: filtered.map((item) => item.id) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(data?.error ?? "The protected export could not be created.");
+      }
+      downloadBlob(await response.blob(), `active-repair-cases-with-pii-${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "The protected export could not be created.");
+    } finally {
+      setExportingPii(false);
+    }
+  }
+
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <section className="rounded-[1.5rem] border border-black/10 bg-white">
       <div className="border-b border-black/10 p-5 sm:p-6">
@@ -53,8 +91,9 @@ export function ActiveCasesList({ cases }: { cases: ActiveCaseRow[] }) {
             <h2 className="text-xl font-semibold">All active cases</h2>
             <p className="mt-1 text-sm text-black/50">Every request that still needs customer, Support, Repair, or Logistics work.</p>
           </div>
-          <p className="text-sm font-semibold text-black/55">{filtered.length} of {cases.length} cases</p>
+          <div className="flex flex-wrap items-center gap-3"><p className="text-sm font-semibold text-black/55">{filtered.length} of {cases.length} cases</p><button type="button" onClick={exportCsv} disabled={!filtered.length} className="h-10 cursor-pointer rounded-xl border border-black/15 px-4 text-sm font-semibold hover:border-black/35 disabled:cursor-not-allowed disabled:opacity-35">Export CSV</button>{canExportPii ? <button type="button" onClick={exportCsvWithPii} disabled={!filtered.length || exportingPii} className="h-10 cursor-pointer rounded-xl bg-black px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">{exportingPii ? "Preparing…" : "Export CSV with PII"}</button> : null}</div>
         </div>
+        {exportError ? <p role="alert" className="mt-3 text-sm text-red-700">{exportError}</p> : null}
         <div className="mt-5 grid gap-3 md:grid-cols-[minmax(15rem,1fr)_12rem_12rem]">
           <label className="block">
             <span className="sr-only">Search active cases</span>
