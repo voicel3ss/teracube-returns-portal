@@ -3,6 +3,7 @@ import { getStaffContext } from "@/auth/staff-request";
 import { hasPermission } from "@/auth/permissions";
 import { staffDestination } from "@/auth/staff-destination";
 import { prisma } from "@/db/prisma";
+import { getOverdueOrderIds } from "@/db/overdue-orders";
 import { StaffShell } from "../support/staff-shell";
 import Link from "next/link";
 
@@ -16,7 +17,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const q = typeof params.q === "string" ? params.q : "";
   const normalizedQuery = q.trim();
   const serialQuery = normalizedQuery.toUpperCase();
-  const customers = await prisma.customer.findMany({
+  const [customers, overdueOrderIds] = await Promise.all([prisma.customer.findMany({
     where: {
       mergedIntoId: null,
       AND: [
@@ -39,7 +40,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     },
     orderBy: { updatedAt: "desc" },
     take: 50,
-  });
+  }), getOverdueOrderIds()]);
   const customerRows = customers.map((customer) => ({
     ...customer,
     associatedDeviceCount: new Set([...customer.devices.map((device) => device.serial), ...customer.orders.flatMap((order) => [order.returnedDeviceSerial, order.outboundDeviceSerial].filter((serial): serial is string => Boolean(serial)))]).size,
@@ -79,7 +80,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                   ) : <p className="font-medium">No email</p>}
                   <p className="mt-1 text-xs text-black/40">{customer.emails.length} email{customer.emails.length === 1 ? "" : "s"} · {customer.associatedDeviceCount} associated device{customer.associatedDeviceCount === 1 ? "" : "s"} · {customer._count.orders} order{customer._count.orders === 1 ? "" : "s"}</p>
                   {customer.orders.length ? <div className="mt-3 flex flex-wrap gap-2">{customer.orders.map((order) => {
-                    const overdue = order.status !== "closed" && order.updatedAt.getTime() < Date.now() - 86_400_000;
+                    const overdue = overdueOrderIds.has(order.id);
                     return <Link key={order.id} href={`/staff/support/orders/${order.id}`} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${overdue ? "border-red-200 bg-red-50 text-red-800 hover:border-red-400" : "border-black/10 bg-black/[.02] hover:border-black/25"}`}>#{String(order.orderNumber).padStart(4, "0")} · {order.status.replaceAll("_", " ")}{overdue ? " · Over 24h" : ""}</Link>;
                   })}</div> : <p className="mt-2 text-xs text-black/35">No replacement requests yet.</p>}
                 </div>
