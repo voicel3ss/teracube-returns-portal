@@ -60,6 +60,13 @@ function money(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
+function identifierLookupType(value: string): "serial" | "phone" {
+  const normalized = value.trim();
+  const digits = normalized.replace(/\D/g, "");
+  const containsOnlyPhoneCharacters = /^[+()\d.\s-]+$/.test(normalized);
+  return containsOnlyPhoneCharacters && digits.length >= 10 && digits.length <= 15 ? "phone" : "serial";
+}
+
 async function encodePhotos(files: File[]) {
   return Promise.all(files.map((file) => new Promise<{ name: string; type: string; data: string }>((resolve, reject) => {
     const reader = new FileReader();
@@ -69,11 +76,10 @@ async function encodePhotos(files: File[]) {
   })));
 }
 
-export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: { parentAppEntry?: string; initialLookupType?: "serial" | "phone" }) {
+export function RepairWizard({ parentAppEntry, initialSerial, initialParentEmail }: { parentAppEntry?: string; initialSerial?: string; initialParentEmail?: string }) {
   const [step, setStep] = useState<Step>("identify");
-  const [lookupType, setLookupType] = useState<"serial" | "phone">(initialLookupType);
-  const [identifier, setIdentifier] = useState("");
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState(initialSerial || "");
+  const [email, setEmail] = useState(initialParentEmail || "");
   const [emailChallengeId, setEmailChallengeId] = useState<string | null>(null);
   const [emailCode, setEmailCode] = useState("");
   const [emailVerificationToken, setEmailVerificationToken] = useState<string | null>(null);
@@ -102,7 +108,7 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
   const [busy, setBusy] = useState(false);
   const [validatingAddress, setValidatingAddress] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const appEntryLoaded = useRef(false);
+  const automaticLookupStarted = useRef(false);
 
   const selectedOption = useMemo(
     () => options.find((option) => option.id === selectedOptionId) ?? null,
@@ -110,7 +116,7 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
   );
 
   const identify = useCallback(
-    async (appEntry?: string) => {
+    async (appEntry?: string, directLookup?: { serial?: string; childPhone?: string }) => {
       setBusy(true);
       setError(null);
       setLookupFailed(false);
@@ -121,7 +127,9 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
           body: JSON.stringify(
             appEntry
               ? { parentAppEntry: appEntry }
-              : lookupType === "serial"
+              : directLookup
+                ? directLookup
+              : identifierLookupType(identifier) === "serial"
                 ? { serial: identifier, parentEmail: email, emailVerificationToken }
                 : { childPhone: identifier, parentEmail: email, emailVerificationToken },
           ),
@@ -147,15 +155,15 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
         setBusy(false);
       }
     },
-    [email, emailVerificationToken, identifier, lookupType],
+    [email, emailVerificationToken, identifier],
   );
 
   useEffect(() => {
-    if (parentAppEntry && !appEntryLoaded.current) {
-      appEntryLoaded.current = true;
-      void identify(parentAppEntry);
+    if (!automaticLookupStarted.current && (parentAppEntry || initialSerial)) {
+      automaticLookupStarted.current = true;
+      void identify(parentAppEntry, parentAppEntry ? undefined : { serial: initialSerial });
     }
-  }, [identify, parentAppEntry]);
+  }, [identify, initialSerial, parentAppEntry]);
 
   async function loadOptions() {
     if (!device || !faultCategory || faultText.trim().length < 3) {
@@ -196,7 +204,7 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
       const response = await fetch("/api/repair/unidentified", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parentEmail: email, emailVerificationToken, lookupType, identifier: identifier.trim(), message: identificationHelpText, photos }),
+        body: JSON.stringify({ parentEmail: email, emailVerificationToken, lookupType: identifierLookupType(identifier), identifier: identifier.trim(), message: identificationHelpText, photos }),
       });
       const body = await readApiResponse(response);
       if (!response.ok) throw new Error(body.error ?? "We couldn't create the request.");
@@ -254,6 +262,18 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
       setEmailVerificationToken(body.verificationToken);
       setLocalEmailCode(null);
       setEmailCode("");
+      if (step === "confirm" && device) {
+        const duplicateCheck = await fetch("/api/repair/identify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: device.serial, parentEmail: body.email, emailVerificationToken: body.verificationToken }),
+        });
+        const duplicateBody = await readApiResponse(duplicateCheck);
+        if (!duplicateCheck.ok) throw new Error(duplicateBody.error ?? "We couldn't check the device request status.");
+        if (duplicateBody.status === "active_request") {
+          setActiveRequest({ orderNumber: duplicateBody.orderNumber, trackingUrl: duplicateBody.trackingUrl });
+        }
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "We couldn't verify that email.");
     } finally {
@@ -391,46 +411,29 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
           </div>
         ) : null}
 
-        {!activeRequest && parentAppEntry && busy && step === "identify" ? (
+        {!activeRequest && (parentAppEntry || initialSerial) && busy && step === "identify" ? (
           <div className="py-16 text-center">
             <div className="mx-auto size-8 animate-spin rounded-full border-2 border-black/15 border-t-[var(--green-strong)]" />
             <p className="mt-5 text-sm text-black/55">Finding the device from your Parent app…</p>
           </div>
         ) : null}
 
-        {!activeRequest && step === "identify" && !(parentAppEntry && busy) ? (
+        {!activeRequest && step === "identify" && !((parentAppEntry || initialSerial) && busy) ? (
           <div>
             <p className="text-sm font-semibold text-[var(--green-strong)]">Let’s find the device</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">Which device needs care?</h1>
             <p className="mt-3 max-w-xl leading-7 text-black/55">
-              Use the serial number or the child’s phone number. We’ll pull the device details for you.
+              Enter whichever detail you have available and we’ll find the device for you.
             </p>
 
-            <div className="mt-8 grid grid-cols-2 rounded-xl bg-black/[0.045] p-1">
-              {(["serial", "phone"] as const).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => {
-                    setLookupType(type);
-                    setIdentifier("");
-                    setLookupFailed(false);
-                  }}
-                  className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition ${lookupType === type ? "bg-white shadow-sm" : "text-black/50"}`}
-                >
-                  {type === "serial" ? "Serial number" : "Child phone"}
-                </button>
-              ))}
-            </div>
-
-            <label className="mt-6 block text-sm font-semibold" htmlFor="identifier">
-              {lookupType === "serial" ? "Device serial" : "Child’s phone number"}
+            <label className="mt-8 block text-sm font-semibold" htmlFor="identifier">
+              Device serial or child’s phone number
             </label>
             <input
               id="identifier"
               value={identifier}
               onChange={(event) => setIdentifier(event.target.value)}
-              placeholder={lookupType === "serial" ? "202112T2E235968" : "(206) 555-0142"}
+              placeholder="202112T2E235968 or (206) 555-0142"
               className="mt-2 h-12 w-full rounded-xl border border-black/15 px-4 outline-none transition focus:border-[var(--green-strong)] focus:ring-3 focus:ring-[var(--mint)]/40"
             />
             <label className="mt-5 block text-sm font-semibold" htmlFor="parent-email">
@@ -492,19 +495,18 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
               <p className="text-sm font-semibold text-black/65">Try a sample device</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 {sampleDevices.map((sampleDevice) => {
-                  const sampleIdentifier = lookupType === "serial" ? sampleDevice.serial : sampleDevice.phone;
                   return (
                     <button
                       key={sampleDevice.serial}
                       type="button"
                       onClick={() => {
-                        setIdentifier(sampleIdentifier);
+                        setIdentifier(sampleDevice.serial);
                         setLookupFailed(false);
                       }}
                       className="rounded-lg border border-black/10 bg-white/60 px-3 py-2 text-left transition hover:border-black/25 hover:bg-white"
                     >
                       <span className="block text-xs font-semibold text-black/70">{sampleDevice.model}</span>
-                      <span className="mt-1 block font-mono text-[11px] text-black/50">{sampleIdentifier}</span>
+                      <span className="mt-1 block font-mono text-[11px] text-black/50">{sampleDevice.serial}</span>
                     </button>
                   );
                 })}
@@ -515,7 +517,7 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
               <div className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-5">
                 <h2 className="font-semibold">We couldn’t find that device</h2>
                 <p className="mt-2 text-sm leading-6 text-black/60">
-                  Check the serial in the Parent app and try again. If you still cannot find it, create a Support request and we’ll help identify the device on this website.
+                  Check the serial or phone number and try again. If you still cannot find it, create a Support request and we’ll help identify the device on this website.
                 </p>
                 <label className="mt-4 block text-sm font-semibold" htmlFor="identification-help">Anything else Support should know? <span className="font-normal text-black/45">(optional)</span></label>
                 <textarea
@@ -587,10 +589,46 @@ export function RepairWizard({ parentAppEntry, initialLookupType = "serial" }: {
                 <div><dt className="text-black/45">ICCID</dt><dd className="mt-1 font-medium">{device.iccidMasked}</dd></div>
               </dl>
             </div>
+            {!emailVerificationToken ? (
+              <div className="mt-5 rounded-2xl border border-black/10 bg-[#f7f8f5] p-5">
+                <h2 className="font-semibold">Confirm the parent email</h2>
+                <p className="mt-1 text-sm leading-6 text-black/50">We prefilled the email from the link. Verify it before continuing.</p>
+                <label className="mt-4 block text-sm font-semibold" htmlFor="confirmation-parent-email">Parent email</label>
+                <input
+                  id="confirmation-parent-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => changeEmail(event.target.value)}
+                  placeholder="Enter email"
+                  className="mt-2 h-12 w-full rounded-xl border border-black/15 bg-white px-4 outline-none transition focus:border-[var(--green-strong)] focus:ring-3 focus:ring-[var(--mint)]/40"
+                />
+                {emailChallengeId ? (
+                  <>
+                    <label className="mt-4 block text-sm font-semibold" htmlFor="confirmation-email-code">Six-digit code</label>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        id="confirmation-email-code"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={emailCode}
+                        onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ""))}
+                        className="h-11 min-w-0 flex-1 rounded-xl border border-black/15 bg-white px-4 font-mono tracking-[0.25em] outline-none focus:border-[var(--green-strong)]"
+                      />
+                      <button type="button" onClick={verifyEmail} disabled={busy || emailCode.length !== 6} className="cursor-pointer rounded-xl bg-black px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35">Verify</button>
+                    </div>
+                    {localEmailCode ? <p className="mt-3 text-xs leading-5 text-black/50">Verification code for local testing: <strong className="font-mono text-black">{localEmailCode}</strong></p> : null}
+                  </>
+                ) : (
+                  <button type="button" onClick={sendEmailCode} disabled={busy || !email.includes("@")} className="mt-3 h-11 w-full cursor-pointer rounded-xl border border-black/15 bg-white text-sm font-semibold hover:border-black/35 disabled:cursor-not-allowed disabled:opacity-35">Send verification code</button>
+                )}
+              </div>
+            ) : <p className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">Parent email verified.</p>}
             <button
               type="button"
               onClick={() => setStep("fault")}
-              className="mt-7 h-12 w-full rounded-xl bg-black font-semibold text-white hover:bg-black/80"
+              disabled={busy || !emailVerificationToken}
+              className="mt-7 h-12 w-full cursor-pointer rounded-xl bg-black font-semibold text-white hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Yes, that’s it
             </button>

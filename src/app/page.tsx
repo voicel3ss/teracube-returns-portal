@@ -37,12 +37,9 @@ export default function Home() {
             <p className="mt-6 max-w-2xl text-lg leading-8 text-black/62">
               Start a repair or replacement request in a few minutes. We’ll identify the device, explain your options clearly, and keep you updated from start to finish.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-8">
               <Link href="/repair/start" className="inline-flex h-13 items-center justify-center rounded-full bg-black px-8 font-semibold text-white transition hover:bg-black/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black">
                 Start a request
-              </Link>
-              <Link href="/repair/start?lookup=phone" className="inline-flex h-13 items-center justify-center rounded-full border border-black/15 bg-white px-8 font-semibold text-black/65 transition hover:border-black/30 hover:text-black">
-                Use child’s phone number
               </Link>
             </div>
             <p className="mt-4 text-sm text-black/45">No account needed. Have the device or child’s phone number nearby.</p>

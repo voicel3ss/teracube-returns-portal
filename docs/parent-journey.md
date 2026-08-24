@@ -2,7 +2,8 @@
 
 ## Entry paths
 
-- Public self-service: `/repair/start`, with `/repair/start?lookup=phone` opening directly in child-phone lookup mode
+- Public self-service: `/repair/start`, with one field that accepts either a device serial or child phone number
+- Browser handoff: `/repair/start?serial=202112T2E235968&parentEmail=parent@gmail.com` resolves the supplied serial and opens directly on device confirmation with the parent email prefilled. The email must still be verified before the customer continues.
 - Parent-app deep link: a short-lived server-signed `entry` token containing the parent email and device serial
 - Staff-created secure intake link: generated from the Support queue and valid for seven days
 
