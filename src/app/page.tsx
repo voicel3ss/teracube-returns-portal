@@ -37,12 +37,15 @@ export default function Home() {
             <p className="mt-6 max-w-2xl text-lg leading-8 text-black/62">
               Start a repair or replacement request in a few minutes. We’ll identify the device, explain your options clearly, and keep you updated from start to finish.
             </p>
-            <div className="mt-8">
-              <Link href="/repair/start" className="inline-flex h-13 items-center justify-center rounded-full bg-black px-8 font-semibold text-white transition hover:bg-black/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black">
+            <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
+              <Link href="/repair/start" className="inline-flex h-14 min-w-52 cursor-pointer items-center justify-center rounded-full bg-black px-8 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-black/85 hover:shadow-lg focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-black">
                 Start a request
               </Link>
+              <div className="text-sm leading-5 text-black/48">
+                <p className="font-semibold text-black/65">No account needed</p>
+                <p>Have the device or child’s phone number nearby.</p>
+              </div>
             </div>
-            <p className="mt-4 text-sm text-black/45">No account needed. Have the device or child’s phone number nearby.</p>
           </div>
 
           <aside className="rounded-3xl border border-white/35 bg-white/55 p-7 shadow-[0_20px_60px_rgba(9,9,9,0.07)] backdrop-blur-sm sm:p-9">
